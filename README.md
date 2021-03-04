@@ -4,7 +4,7 @@ It parses column information (column widths and headers) passed in arguments,
 shows the menu and then waits for commands from the input file descriptor.
 
 Currently, the following commands are supported:
- * `+\n`, then N lines with columns texts, where N is the number of columns.
+ * `+\n`, then N lines with columns texts, where N is the number of columns: add entry.
  * `- INDEX\n`, where `INDEX` is a valid entry index: remove entry.
  * `x\n`: remove all entries.
 
