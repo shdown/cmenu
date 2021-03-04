@@ -46,10 +46,10 @@ typedef struct {
     // The headers of the columns; valid indices are [0; list->ncols).
     TruncatedText *headers;
 
-    // The "denominator" for variable-width headers.
+    // The "denominator" for variable-width columns.
     uint32_t vw_denom;
 
-    // The sum of widths of fixed-width headers.
+    // The sum of widths of fixed-width columns.
     uint32_t fw_sum;
 
     ListEntry *entries;
@@ -524,7 +524,7 @@ int main(int argc, char **argv)
 {
     setlocale(LC_ALL, "");
 
-    StringVec header_args = string_vec_new();
+    StringVec column_args = string_vec_new();
     bool enable_custom = false;
     RawStyle style_header = {.a = A_BOLD, .fc = COLOR_WHITE, .bc = COLOR_GREEN};
     RawStyle style_hi     = {.a = 0,      .fc = COLOR_WHITE, .bc = COLOR_BLUE};
@@ -557,8 +557,8 @@ int main(int argc, char **argv)
                 return 2;
             }
 
-        } else if ((v = strfollow(arg, "-header="))) {
-            string_vec_push(&header_args, v);
+        } else if ((v = strfollow(arg, "-column="))) {
+            string_vec_push(&column_args, v);
 
         } else if ((v = strfollow(arg, "-infd="))) {
             infd = parse_uint(v, strlen(v), INT_MAX);
@@ -583,8 +583,8 @@ int main(int argc, char **argv)
         }
     }
 
-    if (!header_args.size) {
-        fprintf(stderr, "No -header= arguments found.\n");
+    if (!column_args.size) {
+        fprintf(stderr, "No -column= arguments found.\n");
         return 2;
     }
 
@@ -598,17 +598,17 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    size_t ncols = header_args.size;
+    size_t ncols = column_args.size;
     ListColumn *cols = malloc_or_die(sizeof(ListColumn), ncols);
     TruncatedText *headers = malloc_or_die(sizeof(TruncatedText), ncols);
     uint32_t vw_denom = 0;
     uint32_t fw_sum = 0;
 
     for (size_t i = 0; i < ncols; ++i) {
-        const char *arg = header_args.data[i];
+        const char *arg = column_args.data[i];
         const char *colon = strchr(arg, ':');
         if (!colon) {
-            fprintf(stderr, "Invalid -header= argument (no ':' found): '%s'.\n", arg);
+            fprintf(stderr, "Invalid -column= argument (no ':' found): '%s'.\n", arg);
             return 2;
         }
         int32_t w = 1;
@@ -621,7 +621,7 @@ int main(int argc, char **argv)
             }
             int32_t r = parse_uint(number_start, colon - number_start, INT32_MAX);
             if (r < 0) {
-                fprintf(stderr, "Cannot parse header width in -header='%s': %s.\n", arg, parse_uint_strerror(r));
+                fprintf(stderr, "Cannot parse column width in -column='%s': %s.\n", arg, parse_uint_strerror(r));
                 return 2;
             }
             w = negate ? -r : r;
@@ -633,14 +633,14 @@ int main(int argc, char **argv)
             uint32_t addend = w;
             vw_denom += addend;
             if (vw_denom < addend) {
-                fprintf(stderr, "Total width of the (variable-width) headers would overflow uint32_t.\n");
+                fprintf(stderr, "Total width of the (variable-width) columns would overflow uint32_t.\n");
                 return 2;
             }
         } else {
             uint32_t addend = -w;
             fw_sum += addend;
             if (fw_sum < addend) {
-                fprintf(stderr, "Total width of the fixed-width headers would overflow uint32_t.\n");
+                fprintf(stderr, "Total width of the fixed-width columns would overflow uint32_t.\n");
                 return 2;
             }
         }
