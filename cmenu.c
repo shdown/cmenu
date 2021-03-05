@@ -13,6 +13,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <limits.h>
 #include <locale.h>
 #include <poll.h>
@@ -79,6 +80,16 @@ typedef struct {
 
     char info_buf[512];
 } List;
+
+static char global_errmsg[1024];
+
+static void errmsgf(const char *fmt, ...)
+{
+    va_list vl;
+    va_start(vl, fmt);
+    vsnprintf(global_errmsg, sizeof(global_errmsg), fmt, vl);
+    va_end(vl);
+}
 
 static void list_entry_free(List *list, ListEntry entry)
 {
@@ -248,28 +259,25 @@ done:
     refresh();
 }
 
-static void print_result(List *list, bool custom, int *exitcode)
+static void print_result(List *list, bool custom)
 {
-    int r;
+    fprintf(list->outfile, "result\n");
     if (custom) {
-        r = fprintf(list->outfile, "c\n");
-    } else {
+        fprintf(list->outfile, "custom\n");
+    }
+    if (list->size) {
         char buf[32];
         int n = print_uint(buf, sizeof(buf), list->selected);
         buf[n] = '\0';
-        r = fprintf(list->outfile, "%s\n", buf);
-    }
-    if (r < 0) {
-        perror("Cannot print to output fd");
-        *exitcode = 1;
+        fprintf(list->outfile, "%s\n", buf);
     } else {
-        *exitcode = 0;
+        fprintf(list->outfile, "empty\n");
     }
 }
 
 #define ctrl(x) ((x) & 0x1F)
 
-static int handle_input(List *list, bool *requery_size, int *exitcode)
+static int handle_input(List *list, bool *requery_size)
 {
     int c = getch();
     switch (c) {
@@ -337,14 +345,14 @@ static int handle_input(List *list, bool *requery_size, int *exitcode)
     case '\n':
     case '\r':
         if (list->size) {
-            print_result(list, false, exitcode);
+            print_result(list, false);
             return -1;
         }
         return 0;
 
     case 'c':
         if (list->enable_custom) {
-            print_result(list, true, exitcode);
+            print_result(list, true);
             return -1;
         }
         return 0;
@@ -354,7 +362,6 @@ static int handle_input(List *list, bool *requery_size, int *exitcode)
         return 0;
 
     case 'q':
-        *exitcode = 0;
         return -1;
 
     case ERR:
@@ -396,15 +403,15 @@ static char *read_line_from_infile(List *list, int *caught_signal)
     return line;
 }
 
-static int handle_infile_line(List *list, bool *close_infile, int *caught_signal)
+static int handle_infile_command(List *list, int *caught_signal)
 {
     char *line = read_line_from_infile(list, caught_signal);
     if (!line) {
         if (errno == 0) {
-            *close_infile = true;
-            return 0;
+            errmsgf("Expected a command, got EOF.\n");
+            return -1;
         } else {
-            perror("Cannot read line from input fd");
+            errmsgf("Cannot read line from input fd: %s\n", strerror(errno));
             return -1;
         }
     }
@@ -417,10 +424,10 @@ static int handle_infile_line(List *list, bool *close_infile, int *caught_signal
             line = read_line_from_infile(list, caught_signal);
             if (!line) {
                 if (errno == 0) {
-                    fprintf(stderr, "Unterminated '+' command.\n");
+                    errmsgf("Unterminated '+' command (got EOF).\n");
                     goto cleanup_and_fail;
                 } else {
-                    perror("Cannot read line from input fd");
+                    errmsgf("Cannot read line from input fd: %s\n", strerror(errno));
                     goto cleanup_and_fail;
                 }
             }
@@ -441,7 +448,7 @@ cleanup_and_fail:
         const char *v = line + 2;
         int64_t r = parse_uint(v, strlen(v), INT64_MAX);
         if (r < 0) {
-            fprintf(stderr, "Cannot parse '-' index: %s.\n", parse_uint_strerror(r));
+            errmsgf("Cannot parse '-' index: %s\n", parse_uint_strerror(r));
             return -1;
         }
         list_del(list, r);
@@ -452,7 +459,40 @@ cleanup_and_fail:
         return 0;
 
     } else {
-        fprintf(stderr, "Invalid command: '%s'.\n", line);
+        return -1;
+    }
+}
+
+static int handle_infile_line(List *list, bool *close_infile, int *caught_signal)
+{
+    char *line = read_line_from_infile(list, caught_signal);
+    if (!line) {
+        if (errno == 0) {
+            *close_infile = true;
+            return 0;
+        } else {
+            errmsgf("Cannot read line from input fd: %s\n", strerror(errno));
+            return -1;
+        }
+    }
+
+    if (line[0] == 'n' && line[1] == ' ') {
+        const char *v = line + 2;
+        int64_t n = parse_uint(v, strlen(v), INT64_MAX);
+        if (n < 0) {
+            errmsgf("Cannot parse 'n' number: %s\n", parse_uint_strerror(n));
+            return -1;
+        }
+        for (int64_t i = 0; i < n; ++i) {
+            if (handle_infile_command(list, caught_signal) < 0) {
+                return -1;
+            }
+        }
+        fprintf(list->outfile, "ok\n");
+        return 0;
+
+    } else {
+        errmsgf("Invalid line (expected 'n NUMBER'): %s\n", line);
         return -1;
     }
 }
@@ -673,7 +713,7 @@ int main(int argc, char **argv)
     set_escdelay(50);
     halfdelay(1);
 
-    int ret = 0;
+    int ret;
 
     List list = {
         .ncols = ncols,
@@ -709,7 +749,7 @@ again:
         if (errno == EINTR) {
             goto handle_ncurses_input;
         } else {
-            perror("poll");
+            errmsgf("poll: %s\n", strerror(errno));
             ret = 1;
             goto done;
         }
@@ -741,12 +781,16 @@ handle_infile_input:
     goto again;
 
 handle_ncurses_input:
-    if (handle_input(&list, &requery_size, &ret) < 0) {
+    if (handle_input(&list, &requery_size) < 0) {
+        ret = 0;
         goto done;
     }
     goto again;
 
 done:
     endwin();
+    if (global_errmsg[0]) {
+        fputs(global_errmsg, stderr);
+    }
     return ret;
 }
