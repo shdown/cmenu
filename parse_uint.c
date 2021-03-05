@@ -16,7 +16,7 @@ int64_t parse_uint(const char *s, size_t ns, int64_t max)
         int digit = s[i] - '0';
         if (digit < 0 || digit > 9)
             return E_BAD;
-        if (r > INT_MAX / 10)
+        if (r > INT64_MAX / 10)
             return E_OVERFLOW;
         r *= 10;
         if (r > max - digit)

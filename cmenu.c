@@ -91,6 +91,24 @@ static void errmsgf(const char *fmt, ...)
     va_end(vl);
 }
 
+static int sayf(List *list, const char *fmt, ...)
+{
+    va_list vl;
+    va_start(vl, fmt);
+    if (vfprintf(list->outfile, fmt, vl) < 0) {
+        goto error;
+    }
+    if (fflush(list->outfile) < 0) {
+        goto error;
+    }
+    va_end(vl);
+    return 0;
+error:
+    errmsgf("Cannot write to output fd: %s\n", strerror(errno));
+    va_end(vl);
+    return -1;
+}
+
 static void list_entry_free(List *list, ListEntry entry)
 {
     for (size_t i = 0; i < list->ncols; ++i) {
@@ -99,12 +117,12 @@ static void list_entry_free(List *list, ListEntry entry)
     free(entry.cols);
 }
 
-static void list_add(List *list, const ListEntry *entry)
+static void list_add(List *list, ListEntry entry)
 {
     if (list->size == list->capacity) {
         list->entries = x2realloc_or_die(list->entries, &list->capacity, sizeof(ListEntry));
     }
-    list->entries[list->size++] = *entry;
+    list->entries[list->size++] = entry;
 }
 
 static bool list_del(List *list, uint64_t idx)
@@ -259,25 +277,39 @@ done:
     refresh();
 }
 
-static void print_result(List *list, bool custom)
+static void print_result(List *list, bool custom, int *exitcode)
 {
-    fprintf(list->outfile, "result\n");
-    if (custom) {
-        fprintf(list->outfile, "custom\n");
+    if (sayf(list, "result\n") < 0) {
+        goto error;
     }
+
+    if (custom) {
+        if (sayf(list, "custom\n") < 0) {
+            goto error;
+        }
+    }
+
     if (list->size) {
         char buf[32];
         int n = print_uint(buf, sizeof(buf), list->selected);
         buf[n] = '\0';
-        fprintf(list->outfile, "%s\n", buf);
+        if (sayf(list, "%s\n", buf) < 0) {
+            goto error;
+        }
     } else {
-        fprintf(list->outfile, "empty\n");
+        if (sayf(list, "empty\n") < 0) {
+            goto error;
+        }
     }
+    return;
+
+error:
+    *exitcode = 1;
 }
 
 #define ctrl(x) ((x) & 0x1F)
 
-static int handle_input(List *list, bool *requery_size)
+static int handle_input(List *list, bool *requery_size, int *exitcode)
 {
     int c = getch();
     switch (c) {
@@ -345,14 +377,14 @@ static int handle_input(List *list, bool *requery_size)
     case '\n':
     case '\r':
         if (list->size) {
-            print_result(list, false);
+            print_result(list, false, exitcode);
             return -1;
         }
         return 0;
 
     case 'c':
         if (list->enable_custom) {
-            print_result(list, true);
+            print_result(list, true, exitcode);
             return -1;
         }
         return 0;
@@ -434,7 +466,7 @@ static int handle_infile_command(List *list, int *caught_signal)
             cols[coli] = truncated_text_from_cstr(line);
         }
         ListEntry entry = {cols};
-        list_add(list, &entry);
+        list_add(list, entry);
         return 0;
 
 cleanup_and_fail:
@@ -489,7 +521,9 @@ static int handle_infile_line(List *list, bool *close_infile, int *caught_signal
                 return -1;
             }
         }
-        fprintf(list->outfile, "ok\n");
+        if (sayf(list, "ok\n") < 0) {
+            return -1;
+        }
         return 0;
 
     } else {
@@ -652,6 +686,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "Invalid -column= argument (no ':' found): '%s'.\n", arg);
             return 2;
         }
+
         int32_t w = 1;
         if (colon != arg) {
             const char *number_start = arg;
@@ -667,6 +702,7 @@ int main(int argc, char **argv)
             }
             w = negate ? -r : r;
         }
+
         headers[i] = truncated_text_from_cstr(colon + 1);
         cols[i] = (ListColumn) {.w = w};
 
@@ -703,10 +739,6 @@ int main(int argc, char **argv)
         perror("cannot fdopen output fd");
         return 1;
     }
-    if (setvbuf(outfile, NULL, _IOLBF, 0) != 0) {
-        fprintf(stderr, "setvbuf (_IOLBF) failed.\n");
-        return 1;
-    }
 
     initscr();
     start_color();
@@ -718,7 +750,7 @@ int main(int argc, char **argv)
     set_escdelay(50);
     halfdelay(1);
 
-    int ret;
+    int ret = 0;
 
     List list = {
         .ncols = ncols,
@@ -786,8 +818,7 @@ handle_infile_input:
     goto again;
 
 handle_ncurses_input:
-    if (handle_input(&list, &requery_size) < 0) {
-        ret = 0;
+    if (handle_input(&list, &requery_size, &ret) < 0) {
         goto done;
     }
     goto again;
