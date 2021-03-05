@@ -459,6 +459,7 @@ cleanup_and_fail:
         return 0;
 
     } else {
+        errmsgf("Invalid command: %s\n", line);
         return -1;
     }
 }
