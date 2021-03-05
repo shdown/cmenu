@@ -702,6 +702,10 @@ int main(int argc, char **argv)
         perror("cannot fdopen output fd");
         return 1;
     }
+    if (setvbuf(outfile, NULL, _IOLBF, 0) != 0) {
+        fprintf(stderr, "setvbuf (_IOLBF) failed.\n");
+        return 1;
+    }
 
     initscr();
     start_color();
