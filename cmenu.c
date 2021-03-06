@@ -150,6 +150,18 @@ static bool list_del(List *list, uint64_t idx)
     return true;
 }
 
+static bool list_set(List *list, uint64_t idx, ListEntry entry)
+{
+    if (idx >= list->size)
+        return false;
+
+    list_entry_free(list, list->entries[idx]);
+
+    list->entries[idx] = entry;
+
+    return true;
+}
+
 static void list_clear(List *list)
 {
     for (size_t i = 0; i < list->size; ++i)
@@ -445,6 +457,34 @@ static char *read_line_from_infile(List *list, int *caught_signal)
     return line;
 }
 
+static int read_entry_from_infile(List *list, ListEntry *entry, int *caught_signal)
+{
+    size_t ncols = list->ncols;
+    TruncatedText *cols = malloc_or_die(sizeof(TruncatedText), ncols);
+    size_t col_i = 0;
+    for (; col_i < ncols; ++col_i) {
+        char *line = read_line_from_infile(list, caught_signal);
+        if (!line) {
+            if (errno == 0) {
+                errmsgf("Unterminated '+' command (got EOF).\n");
+                goto fail;
+            } else {
+                errmsgf("Cannot read line from input fd: %s\n", strerror(errno));
+                goto fail;
+            }
+        }
+        cols[col_i] = truncated_text_from_cstr(line);
+    }
+    *entry = (ListEntry) {cols};
+    return 0;
+fail:
+    for (size_t i = 0; i < col_i; ++i) {
+        free(cols[i].s);
+    }
+    free(cols);
+    return -1;
+}
+
 static int handle_infile_command(List *list, int *caught_signal)
 {
     char *line = read_line_from_infile(list, caught_signal);
@@ -459,32 +499,26 @@ static int handle_infile_command(List *list, int *caught_signal)
     }
 
     if (line[0] == '+' && line[1] == '\0') {
-        size_t ncols = list->ncols;
-        TruncatedText *cols = malloc_or_die(sizeof(TruncatedText), ncols);
-        size_t coli = 0;
-        for (; coli < ncols; ++coli) {
-            line = read_line_from_infile(list, caught_signal);
-            if (!line) {
-                if (errno == 0) {
-                    errmsgf("Unterminated '+' command (got EOF).\n");
-                    goto cleanup_and_fail;
-                } else {
-                    errmsgf("Cannot read line from input fd: %s\n", strerror(errno));
-                    goto cleanup_and_fail;
-                }
-            }
-            cols[coli] = truncated_text_from_cstr(line);
+        ListEntry entry;
+        if (read_entry_from_infile(list, &entry, caught_signal) < 0) {
+            return -1;
         }
-        ListEntry entry = {cols};
         list_add(list, entry);
         return 0;
 
-cleanup_and_fail:
-        for (size_t i = 0; i < coli; ++i) {
-            free(cols[i].s);
+    } else if (line[0] == '=' && line[1] == ' ') {
+        const char *v = line + 2;
+        int64_t r = parse_uint(v, strlen(v), INT64_MAX);
+        if (r < 0) {
+            errmsgf("Cannot parse '=' index: %s\n", parse_uint_strerror(r));
+            return -1;
         }
-        free(cols);
-        return -1;
+        ListEntry entry;
+        if (read_entry_from_infile(list, &entry, caught_signal) < 0) {
+            return -1;
+        }
+        list_set(list, r, entry);
+        return 0;
 
     } else if (line[0] == '-' && line[1] == ' ') {
         const char *v = line + 2;
