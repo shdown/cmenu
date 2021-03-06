@@ -289,12 +289,10 @@ def network_list_dialog(conn, device):
             return None, 'q'
         if line == 'result\n':
             line = in_f.readline()
-            if line == 'custom\n':
-                _ = in_f.readline()
-                return None, 'c'
-            else:
-                index = int(line.rstrip('\n'))
-                return network_list.get_by_index(index), None
+            index = int(line.rstrip('\n'))
+            return network_list.get_by_index(index), None
+        if line == 'custom\n':
+            return None, 'c'
         raise ValueError(f'unexpected line: "{line}"')
 
 

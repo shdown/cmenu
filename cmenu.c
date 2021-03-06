@@ -300,26 +300,19 @@ static void print_result(List *list, bool custom, int *exitcode)
 {
     int caught_signal = 0;
 
-    if (say(list, "result\n", &caught_signal) < 0) {
-        goto error;
-    }
-
     if (custom) {
         if (say(list, "custom\n", &caught_signal) < 0) {
             goto error;
         }
-    }
-
-    if (list->size) {
+    } else {
+        if (say(list, "result\n", &caught_signal) < 0) {
+            goto error;
+        }
         char buf[32];
         int n = print_uint(buf, sizeof(buf), list->selected);
         buf[n++] = '\n';
         buf[n++] = '\0';
         if (say(list, buf, &caught_signal) < 0) {
-            goto error;
-        }
-    } else {
-        if (say(list, "empty\n", &caught_signal) < 0) {
             goto error;
         }
     }
