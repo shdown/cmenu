@@ -74,7 +74,7 @@ typedef struct {
     char *infile_buf;
     size_t infile_nbuf;
 
-    FILE *outfile;
+    int outfd;
 
     bool need_more_size;
 
@@ -91,22 +91,29 @@ static void errmsgf(const char *fmt, ...)
     va_end(vl);
 }
 
-static int sayf(List *list, const char *fmt, ...)
+static int full_write(int fd, const char *buf, size_t nbuf, int *caught_signal)
 {
-    va_list vl;
-    va_start(vl, fmt);
-    if (vfprintf(list->outfile, fmt, vl) < 0) {
-        goto error;
+    for (size_t nwritten = 0; nwritten < nbuf;) {
+        ssize_t w = write(fd, buf + nwritten, nbuf - nwritten);
+        if (w < 0) {
+            if (errno == EINTR) {
+                *caught_signal = 1;
+                continue;
+            }
+            return -1;
+        }
+        nwritten += w;
     }
-    if (fflush(list->outfile) < 0) {
-        goto error;
-    }
-    va_end(vl);
     return 0;
-error:
-    errmsgf("Cannot write to output fd: %s\n", strerror(errno));
-    va_end(vl);
-    return -1;
+}
+
+static int say(List *list, const char *s, int *caught_signal)
+{
+    if (full_write(list->outfd, s, strlen(s), caught_signal) < 0) {
+        errmsgf("Cannot write to output fd: %s\n", strerror(errno));
+        return -1;
+    }
+    return 0;
 }
 
 static void list_entry_free(List *list, ListEntry entry)
@@ -279,12 +286,14 @@ done:
 
 static void print_result(List *list, bool custom, int *exitcode)
 {
-    if (sayf(list, "result\n") < 0) {
+    int caught_signal = 0;
+
+    if (say(list, "result\n", &caught_signal) < 0) {
         goto error;
     }
 
     if (custom) {
-        if (sayf(list, "custom\n") < 0) {
+        if (say(list, "custom\n", &caught_signal) < 0) {
             goto error;
         }
     }
@@ -292,12 +301,13 @@ static void print_result(List *list, bool custom, int *exitcode)
     if (list->size) {
         char buf[32];
         int n = print_uint(buf, sizeof(buf), list->selected);
-        buf[n] = '\0';
-        if (sayf(list, "%s\n", buf) < 0) {
+        buf[n++] = '\n';
+        buf[n++] = '\0';
+        if (say(list, buf, &caught_signal) < 0) {
             goto error;
         }
     } else {
-        if (sayf(list, "empty\n") < 0) {
+        if (say(list, "empty\n", &caught_signal) < 0) {
             goto error;
         }
     }
@@ -521,7 +531,7 @@ static int handle_infile_line(List *list, bool *close_infile, int *caught_signal
                 return -1;
             }
         }
-        if (sayf(list, "ok\n") < 0) {
+        if (say(list, "ok\n", caught_signal) < 0) {
             return -1;
         }
         return 0;
@@ -558,11 +568,11 @@ static int reset_std_fds(void)
     return 0;
 }
 
-static int check_input_fd(int fd)
+static int check_fd(int fd, const char *what)
 {
     struct stat sb;
     if (fstat(fd, &sb) < 0) {
-        perror("Cannot fstat() input fd");
+        fprintf(stderr, "Cannot fstat() %s: %s\n", what, strerror(errno));
         return -1;
     }
     return 0;
@@ -730,13 +740,11 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (check_input_fd(infd) < 0) {
+    if (check_fd(infd, "input fd") < 0) {
         return 1;
     }
 
-    FILE *outfile = fdopen(outfd, "w");
-    if (!outfile) {
-        perror("cannot fdopen output fd");
+    if (check_fd(outfd, "output fd") < 0) {
         return 1;
     }
 
@@ -762,7 +770,7 @@ int main(int argc, char **argv)
         .infile = {
             .fd = infd,
         },
-        .outfile = outfile,
+        .outfd = outfd,
     };
 
     intern_style(style_header, 1, &list.style_header);
