@@ -8,13 +8,13 @@ in the pack, then `NUMBER` commands in the following lines.
 
 A *command* is either (`NCOLS` is the number of columns):
 
-  * `+\n`, then `NCOLS` lines, each representing the text in the next column: add line;
+  * `+\n`, then `NCOLS` lines, each representing the text in the next column: add entry;
 
-  * `= INDEX\n`, then `NCOLS` lines, each representing the text in the next column: change line with index `INDEX`;
+  * `= INDEX\n`, then `NCOLS` lines, each representing the text in the next column: change entry with index `INDEX`;
 
-  * `- INDEX\n`: delete line with index `INDEX`;
+  * `- INDEX\n`: delete entry with index `INDEX`;
 
-  * `x\n`: delete all lines.
+  * `x\n`: delete all entries.
 
 If the user presses the `q` key, cmenu quits without writing anything to the output file descriptor.
 
