@@ -10,7 +10,7 @@ Once the user selects an entry, it reports this to the controlling process and e
 The protocol of communication with the controlling process is very simple and line-based;
 the controlling process can even be a shell script.
 
-The `wifi_menu.py` is an example that presents an interactive menu of choosing a Wi-Fi
+The `wifi_menu.py` is an example that presents an interactive menu for choosing a Wi-Fi
 network to connect to. It uses the IWD D-Bus API and the `iwctl` binary.
 
 ![screenshot](https://user-images.githubusercontent.com/5462697/110216539-b6c33880-7ec0-11eb-8a7d-a5ee3321efc8.png)
