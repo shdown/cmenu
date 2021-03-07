@@ -145,10 +145,7 @@ def poll_for_input(fd, timeout):
 
 
 def launch_cmenu(args):
-    with (
-        pipe() as pipe1,
-        pipe() as pipe2
-    ):
+    with pipe() as pipe1, pipe() as pipe2:
         their_in, my_out = pipe1
         my_in, their_out = pipe2
 
@@ -275,13 +272,14 @@ def network_list_dialog(conn, device):
                         out_f.write(column)
                         out_f.write('\n')
                 out_f.flush()
-            except OSError as ex:
-                line = ''
-                break
+            except OSError:
+                return None, 'q'
+
             line = in_f.readline()
             if line != 'ok\n':
                 break
-            if poll_for_input(in_f, 1.0):
+
+            if poll_for_input(in_f.fileno(), 1.0):
                 line = in_f.readline()
                 break
 
