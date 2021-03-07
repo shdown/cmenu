@@ -664,7 +664,7 @@ int main(int argc, char **argv)
 
         } else if ((v = strfollow(arg, "-style-hi="))) {
             char err[256];
-            if (parse_style(v, &style_entry, err, sizeof(err)) < 0) {
+            if (parse_style(v, &style_hi, err, sizeof(err)) < 0) {
                 fprintf(stderr, "Invalid -style-hi= argument: %s\n", err);
                 return 2;
             }

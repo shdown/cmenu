@@ -7,7 +7,10 @@ import signal
 from contextlib import contextmanager
 
 
-CMENU_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), './cmenu')
+CMENU = [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), './cmenu'),
+    # your -style-{header,hi,entry}=... arguments here
+]
 
 
 GAUGE_BRIGHT, GAUGE_DIM = '●', '○'
@@ -152,7 +155,7 @@ def launch_cmenu(args):
         os.set_inheritable(their_in.fd, True)
         os.set_inheritable(their_out.fd, True)
 
-        child = spawn_child([CMENU_PATH, f'-infd={their_in.fd}', f'-outfd={their_out.fd}', *args])
+        child = spawn_child([*CMENU, f'-infd={their_in.fd}', f'-outfd={their_out.fd}', *args])
         return (
             child,
             os.fdopen(my_in.release(), 'r'),
