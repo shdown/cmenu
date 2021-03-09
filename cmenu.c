@@ -38,6 +38,11 @@ typedef struct {
 } ListColumn;
 
 typedef struct {
+    char spelling;
+    bool with_index;
+} CustomCommand;
+
+typedef struct {
     // Number of columns.
     size_t ncols;
 
@@ -68,8 +73,6 @@ typedef struct {
     InternedStyle style_highlight;
     InternedStyle style_entry;
 
-    bool enable_custom;
-
     Bio infile;
     char *infile_buf;
     size_t infile_nbuf;
@@ -77,6 +80,12 @@ typedef struct {
     int outfd;
 
     bool need_more_size;
+
+    size_t nccs;
+    CustomCommand *ccs;
+    // If not in command mode, '\0'.
+    // If in command mode, but no character entered, ':'.
+    char current_command;
 
     char info_buf[512];
 } List;
@@ -252,7 +261,7 @@ static void redraw(List *list, bool requery_size)
         update_column_widths(list);
     }
 
-    if (list->height < 3 || list->need_more_size) {
+    if (list->height < 3 || list->width < 3 || list->need_more_size) {
         attr_set(0, 0, NULL);
         mvaddstr(0, 0, "(Need more size)");
         goto done;
@@ -292,22 +301,84 @@ static void redraw(List *list, bool requery_size)
         move(1, 0);
     }
 
+    if (list->current_command) {
+        char buf[3];
+        if (list->current_command == ':') {
+            buf[0] = ':';
+            buf[1] = '\0';
+        } else {
+            buf[0] = ':';
+            buf[1] = list->current_command;
+            buf[2] = '\0';
+        }
+        attr_set(0, 0, NULL);
+        mvaddstr(0, 0, buf);
+    }
+
 done:
     refresh();
 }
 
-static void print_result(List *list, bool custom, int *exitcode)
+static void print_result(List *list, int *exitcode)
 {
     int caught_signal = 0;
 
-    if (custom) {
-        if (say(list, "custom\n", &caught_signal) < 0) {
-            goto error;
+    if (say(list, "result\n", &caught_signal) < 0) {
+        goto error;
+    }
+    char buf[32];
+    int n = print_uint(buf, sizeof(buf), list->selected);
+    buf[n++] = '\n';
+    buf[n++] = '\0';
+    if (say(list, buf, &caught_signal) < 0) {
+        goto error;
+    }
+    return;
+
+error:
+    *exitcode = 1;
+}
+
+static inline bool is_valid_command_ch(int c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
+}
+
+static int print_result_cc(List *list, int *exitcode)
+{
+    char spelling = list->current_command;
+    CustomCommand *cc = NULL;
+    for (size_t i = 0; i < list->nccs; ++i) {
+        CustomCommand *cur = &list->ccs[i];
+        if (cur->spelling == spelling) {
+            cc = cur;
+            break;
         }
-    } else {
-        if (say(list, "result\n", &caught_signal) < 0) {
-            goto error;
+    }
+    if (!cc) {
+        snprintf(
+            list->info_buf, sizeof(list->info_buf),
+            "No such custom command: '%c'", spelling);
+        return -1;
+    }
+    if (cc->with_index && list->size == 0) {
+        if (list->size == 0) {
+            snprintf(
+                list->info_buf, sizeof(list->info_buf),
+                "The list is empty");
+            return -1;
         }
+    }
+
+    int caught_signal;
+    if (say(list, "custom\n", &caught_signal) < 0) {
+        goto error;
+    }
+    char cmd[3] = {spelling, '\n', '\0'};
+    if (say(list, cmd, &caught_signal) < 0) {
+        goto error;
+    }
+    if (cc->with_index) {
         char buf[32];
         int n = print_uint(buf, sizeof(buf), list->selected);
         buf[n++] = '\n';
@@ -316,10 +387,10 @@ static void print_result(List *list, bool custom, int *exitcode)
             goto error;
         }
     }
-    return;
-
+    return 0;
 error:
     *exitcode = 1;
+    return 0;
 }
 
 #define ctrl(x) ((x) & 0x1F)
@@ -327,6 +398,47 @@ error:
 static int handle_input(List *list, bool *requery_size, int *exitcode)
 {
     int c = getch();
+
+    if (list->current_command != '\0') {
+        // Command mode.
+        switch (c) {
+        case ctrl('['):
+            list->current_command = '\0';
+            return 0;
+
+        case ctrl('l'):
+            *requery_size = true;
+            return 0;
+
+        case KEY_ENTER:
+        case '\n':
+        case '\r':
+            if (list->current_command == ':') {
+                list->current_command = '\0';
+            } else {
+                if (print_result_cc(list, exitcode) < 0) {
+                    list->current_command = '\0';
+                    return 0;
+                }
+                return -1;
+            }
+            return 0;
+
+        case KEY_RESIZE:
+            *requery_size = true;
+            return 0;
+
+        case ERR:
+            return 0;
+
+        default:
+            if (is_valid_command_ch(c)) {
+                list->current_command = c;
+            }
+            return 0;
+        }
+    }
+
     switch (c) {
     case KEY_UP:
     case 'k':
@@ -392,16 +504,14 @@ static int handle_input(List *list, bool *requery_size, int *exitcode)
     case '\n':
     case '\r':
         if (list->size) {
-            print_result(list, false, exitcode);
+            print_result(list, exitcode);
             return -1;
         }
         return 0;
 
-    case 'c':
-        if (list->enable_custom) {
-            print_result(list, true, exitcode);
-            return -1;
-        }
+    case ':':
+        list->info_buf[0] = '\0';
+        list->current_command = ':';
         return 0;
 
     case KEY_RESIZE:
@@ -637,7 +747,7 @@ int main(int argc, char **argv)
     setlocale(LC_ALL, "");
 
     StringVec column_args = string_vec_new();
-    bool enable_custom = false;
+    StringVec command_args = string_vec_new();
     RawStyle style_header = {.a = A_BOLD, .fc = COLOR_WHITE, .bc = COLOR_GREEN};
     RawStyle style_hi     = {.a = 0,      .fc = COLOR_WHITE, .bc = COLOR_BLUE};
     RawStyle style_entry  = {.a = 0,      .fc = -1,          .bc = -1};
@@ -686,8 +796,8 @@ int main(int argc, char **argv)
                 return 2;
             }
 
-        } else if (strcmp(arg, "-enable-custom") == 0) {
-            enable_custom = true;
+        } else if ((v = strfollow(arg, "-command="))) {
+            string_vec_push(&command_args, v);
 
         } else {
             fprintf(stderr, "Unknown option: '%s'.\n", arg);
@@ -708,6 +818,28 @@ int main(int argc, char **argv)
     if (outfd < 0) {
         fprintf(stderr, "No -outfd= argument found.\n");
         return 2;
+    }
+
+    size_t nccs = command_args.size;
+    CustomCommand *ccs = malloc_or_die(sizeof(CustomCommand), nccs);
+    for (size_t i = 0; i < nccs; ++i) {
+        const char *arg = command_args.data[i];
+
+        bool with_index = false;
+        const char *spelling = arg;
+        if (spelling[0] == '%') {
+            ++spelling;
+            with_index = true;
+        }
+        if (strlen(spelling) != 1) {
+            fprintf(stderr, "Invalid -command= argument (length of spelling is not 1): '%s'.\n", arg);
+            return 2;
+        }
+        if (!is_valid_command_ch(spelling[0])) {
+            fprintf(stderr, "Invalid -command= argument (bad spelling): '%s'.\n", arg);
+            return 2;
+        }
+        ccs[i] = (CustomCommand) {.spelling = spelling[0], .with_index = with_index};
     }
 
     size_t ncols = column_args.size;
@@ -793,11 +925,12 @@ int main(int argc, char **argv)
         .headers = headers,
         .vw_denom = vw_denom,
         .fw_sum = fw_sum,
-        .enable_custom = enable_custom,
         .infile = {
             .fd = infd,
         },
         .outfd = outfd,
+        .nccs = nccs,
+        .ccs = ccs,
     };
 
     intern_style(style_header, 1, &list.style_header);

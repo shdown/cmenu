@@ -252,7 +252,8 @@ def device_list_dialog(devices):
 
 def network_list_dialog(conn, device):
     child, in_f, out_f = launch_cmenu([
-        '-enable-custom',
+        '-command=r',
+        '-command=d',
         '-column=@7:Status',
         '-column=@5:Type',
         '-column=@7:Signal',
@@ -293,7 +294,8 @@ def network_list_dialog(conn, device):
             index = int(line.rstrip('\n'))
             return network_list.get_by_index(index), None
         if line == 'custom\n':
-            return None, 'c'
+            line = in_f.readline()
+            return None, line.rstrip('\n')
         raise ValueError(f'unexpected line: "{line}"')
 
 
@@ -318,22 +320,31 @@ def main():
         net, alt = network_list_dialog(conn, device)
         if alt == 'q':
             exit(0)
-        elif alt == 'c':
+        elif alt == 'r':
             continue
+        elif alt == 'd':
+            p = subprocess.run([
+                'iwctl',
+                'station',
+                device.name,
+                'disconnect',
+            ])
+            if p.returncode != 0:
+                input('Press Enter to continue >>> ')
+            break
         else:
+            while True:
+                p = subprocess.run([
+                    'iwctl',
+                    'station',
+                    device.name,
+                    'connect',
+                    net.name,
+                ])
+                if p.returncode == 0:
+                    break
+                input('Retry? (Enter/Ctrl+C) >>> ')
             break
-
-    while True:
-        p = subprocess.run([
-            'iwctl',
-            'station',
-            device.name,
-            'connect',
-            net.name,
-        ])
-        if p.returncode == 0:
-            break
-        input('Retry? (Enter/Ctrl+C) >>> ')
 
 
 if __name__ == '__main__':

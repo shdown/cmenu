@@ -18,8 +18,11 @@ A *command* is either (`NCOLS` is the number of columns):
 
 If the user presses the `q` key, cmenu quits without writing anything to the output file descriptor.
 
-If the user presses the `c` key and the “custom” command was enabled (the `-enable-custom` option
-was passed), cmenu writes `custom\n` to the output file descriptor, and then quits.
-
 If the user presses the Enter key and the list is not empty, cmenu writes `result\nINDEX\n` to the
 output file descriptor, where `INDEX` is the index of the selected entry, and then quits.
+
+If the user presses the `:` key and then enters the spelling of a custom command
+(`-command=SPELLING` or `-command=%SPELLING` option), cmenu writes `custom\n` to the output file
+descriptor; then writes `SPELLING\n`; then, if the commands acts on the selected list entry
+(`%SPELLING` variant was used), writes `INDEX\n`, where `INDEX` is the index of the selected entry;
+and then quits.
