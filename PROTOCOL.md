@@ -23,6 +23,6 @@ output file descriptor, where `INDEX` is the index of the selected entry, and th
 
 If the user presses the `:` key and then enters the spelling of a custom command
 (`-command=SPELLING` or `-command=%SPELLING` option), cmenu writes `custom\n` to the output file
-descriptor; then writes `SPELLING\n`; then, if the commands acts on the selected list entry
+descriptor; then writes `SPELLING\n`; then, if the commands acts on a list entry
 (`%SPELLING` variant was used), writes `INDEX\n`, where `INDEX` is the index of the selected entry;
 and then quits.

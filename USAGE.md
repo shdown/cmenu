@@ -34,9 +34,9 @@ Supported OPTIONS:
 
  * `-style-hi=STYLE`: set the style for the highlighted list entry.
 
- * `-command=SPELLING`, where `SPELLING` is a single character in `[a-zA-Z0-9_]`: add custom command (that does *not* act on a selected list entry).
+ * `-command=SPELLING`, where `SPELLING` is a single character in `[a-zA-Z0-9_]`: add custom command (that does *not* act on a list entry).
 
- * `-command=%SPELLING`, where `SPELLING` is a single character in `[a-zA-Z0-9_]`: add custom command (that *does* act on a selected list entry).
+ * `-command=%SPELLING`, where `SPELLING` is a single character in `[a-zA-Z0-9_]`: add custom command (that *does* act on a list entry).
 
 ## Styles
 
