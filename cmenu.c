@@ -319,22 +319,25 @@ done:
     refresh();
 }
 
+static int say_uint(List *list, uint64_t x, int *caught_signal)
+{
+    char buf[32];
+    int n = print_uint(buf, sizeof(buf), x);
+    buf[n++] = '\n';
+    buf[n++] = '\0';
+    return say(list, buf, caught_signal);
+}
+
 static void print_result(List *list, int *exitcode)
 {
     int caught_signal = 0;
-
     if (say(list, "result\n", &caught_signal) < 0) {
         goto error;
     }
-    char buf[32];
-    int n = print_uint(buf, sizeof(buf), list->selected);
-    buf[n++] = '\n';
-    buf[n++] = '\0';
-    if (say(list, buf, &caught_signal) < 0) {
+    if (say_uint(list, list->selected, &caught_signal) < 0) {
         goto error;
     }
     return;
-
 error:
     *exitcode = 1;
 }
@@ -370,7 +373,7 @@ static int print_result_cc(List *list, int *exitcode)
         }
     }
 
-    int caught_signal;
+    int caught_signal = 0;
     if (say(list, "custom\n", &caught_signal) < 0) {
         goto error;
     }
@@ -379,11 +382,7 @@ static int print_result_cc(List *list, int *exitcode)
         goto error;
     }
     if (cc->with_index) {
-        char buf[32];
-        int n = print_uint(buf, sizeof(buf), list->selected);
-        buf[n++] = '\n';
-        buf[n++] = '\0';
-        if (say(list, buf, &caught_signal) < 0) {
+        if (say_uint(list, list->selected, &caught_signal) < 0) {
             goto error;
         }
     }
@@ -410,20 +409,6 @@ static int handle_input(List *list, bool *requery_size, int *exitcode)
             *requery_size = true;
             return 0;
 
-        case KEY_ENTER:
-        case '\n':
-        case '\r':
-            if (list->current_command == ':') {
-                list->current_command = '\0';
-            } else {
-                if (print_result_cc(list, exitcode) < 0) {
-                    list->current_command = '\0';
-                    return 0;
-                }
-                return -1;
-            }
-            return 0;
-
         case KEY_RESIZE:
             *requery_size = true;
             return 0;
@@ -434,8 +419,31 @@ static int handle_input(List *list, bool *requery_size, int *exitcode)
         default:
             if (is_valid_command_ch(c)) {
                 list->current_command = c;
+                return 0;
+
+            } else if (c == '\n' || c == '\r' || c == KEY_ENTER) {
+                if (list->current_command == ':') {
+                    list->current_command = '\0';
+                } else {
+                    if (print_result_cc(list, exitcode) < 0) {
+                        list->current_command = '\0';
+                        return 0;
+                    }
+                    return -1;
+                }
+                return 0;
+
+            } else if (c == 127 || c == '\b' || c == KEY_BACKSPACE) {
+                if (list->current_command == ':') {
+                    list->current_command = '\0';
+                } else {
+                    list->current_command = ':';
+                }
+                return 0;
+
+            } else {
+                return 0;
             }
-            return 0;
         }
     }
 
@@ -500,15 +508,6 @@ static int handle_input(List *list, bool *requery_size, int *exitcode)
         *requery_size = true;
         return 0;
 
-    case KEY_ENTER:
-    case '\n':
-    case '\r':
-        if (list->size) {
-            print_result(list, exitcode);
-            return -1;
-        }
-        return 0;
-
     case ':':
         list->info_buf[0] = '\0';
         list->current_command = ':';
@@ -522,8 +521,18 @@ static int handle_input(List *list, bool *requery_size, int *exitcode)
         return -1;
 
     case ERR:
-    default:
         return 0;
+
+    default:
+        if (c == '\n' || c == '\r' || c == KEY_ENTER) {
+            if (list->size) {
+                print_result(list, exitcode);
+                return -1;
+            }
+            return 0;
+        } else {
+            return 0;
+        }
     }
 }
 
@@ -836,7 +845,7 @@ int main(int argc, char **argv)
             return 2;
         }
         if (!is_valid_command_ch(spelling[0])) {
-            fprintf(stderr, "Invalid -command= argument (bad spelling): '%s'.\n", arg);
+            fprintf(stderr, "Invalid -command= argument (spelling is not in [a-zA-Z0-9_]): '%s'.\n", arg);
             return 2;
         }
         ccs[i] = (CustomCommand) {.spelling = spelling[0], .with_index = with_index};
