@@ -322,7 +322,7 @@ done:
 static int say_uint(List *list, uint64_t x, int *caught_signal)
 {
     char buf[32];
-    int n = print_uint(buf, sizeof(buf), x);
+    int n = print_uint(buf, x);
     buf[n++] = '\n';
     buf[n++] = '\0';
     return say(list, buf, caught_signal);
