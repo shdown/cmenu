@@ -27,7 +27,7 @@ Normal mode
 
 * `q`: quit
 
-* `<ENTER>`: confirm selection
+* `<ENTER>`, `<CTRL+M>`, `<CTRL+J>`: confirm selection
 
 Command mode
 ===
@@ -38,6 +38,6 @@ Command mode
 
 * Any alphanumeric symbol or underscore (`[A-Za-z0-9_]`): enter a command
 
-* `<ENTER>`: confirm command
+* `<ENTER>`, `<CTRL+M>`, `<CTRL+J>`: confirm command
 
-* `<BACKSPACE>`, `<DELETE>`, `<CTRL>+H`: erase command; if no command entered, leave command mode.
+* `<BACKSPACE>`, `<DELETE>`, `<CTRL>+H`: erase command; if no command entered, leave command mode
