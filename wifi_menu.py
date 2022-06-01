@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import subprocess
+import sys
 import os
 import dbus
 import select
@@ -300,26 +301,26 @@ def network_list_dialog(conn, device):
 
 
 def main():
-    signal.signal(signal.SIGINT, lambda *_: os._exit(1))
+    signal.signal(signal.SIGINT, lambda *_: os._exit(0))
 
     conn = IwdConnection()
     devices = list(conn.fetch_devices())
     if not devices:
         print('No devices found.')
         input('Press Enter to continue >>> ')
-        exit(1)
+        sys.exit(0)
     if len(devices) == 1:
         device = devices[0]
     else:
         device, alt = device_list_dialog(devices)
         if alt == 'q':
-            exit(0)
+            sys.exit(0)
 
     while True:
         conn.scan(device)
         net, alt = network_list_dialog(conn, device)
         if alt == 'q':
-            exit(0)
+            sys.exit(0)
         elif alt == 'r':
             continue
         elif alt == 'd':
