@@ -13,13 +13,13 @@ int64_t parse_uint(const char *s, size_t ns, int64_t max)
         return E_EMPTY;
     int64_t r = 0;
     for (size_t i = 0; i < ns; ++i) {
-        int digit = s[i] - '0';
-        if (digit < 0 || digit > 9)
+        unsigned char digit = s[i] - '0';
+        if (digit > 9)
             return E_BAD;
         if (r > INT64_MAX / 10)
             return E_OVERFLOW;
         r *= 10;
-        if (r > max - digit)
+        if (r > (max - (int64_t) digit))
             return E_OVERFLOW;
         r += digit;
     }
