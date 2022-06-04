@@ -99,8 +99,8 @@ handle_output() {
     return 0
 }
 
-x_me=$(readlink -- "$0" || printf '%s\n' "$0")
-x_mydir=$(dirname -- "$x_me")
+x_me=$(readlink -- "$0" || printf '%s\n' "$0") || exit $?
+x_mydir=$(dirname -- "$x_me") || exit $?
 coproc "$x_mydir"/cmenu \
     -infd=3 \
     -outfd=4 \
