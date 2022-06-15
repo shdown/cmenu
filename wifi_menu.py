@@ -300,8 +300,13 @@ def network_list_dialog(conn, device):
         raise ValueError(f'unexpected line: "{line}"')
 
 
+def sighandler(signo, frame):
+    os._exit(0)
+
+
 def main():
-    signal.signal(signal.SIGINT, lambda *_: os._exit(0))
+    signal.signal(signal.SIGINT, sighandler)
+    signal.signal(signal.SIGTERM, sighandler)
 
     conn = IwdConnection()
     devices = list(conn.fetch_devices())

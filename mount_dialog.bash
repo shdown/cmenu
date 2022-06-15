@@ -51,10 +51,10 @@ parse_attr partlabel
 declare -a dev_list=()
 
 fill_dev_list() {
-    local x
-    for x in "${!devs[@]}"; do
-        dev_list+=("$x")
-    done
+    local line
+    while IFS= read -r line; do
+        dev_list+=("$line")
+    done < <(printf '%s\n' "${!devs[@]}" | sort)
 }
 fill_dev_list
 
@@ -64,15 +64,21 @@ if (( ${#dev_list[@]} == 0 )); then
     exit 1
 fi
 
-gen_input() {
-    printf '%s\n' "n ${#dev_list[@]}"
+gen_input_real() {
     local x
+    printf '%s\n' "n ${#dev_list[@]}" || return $?
     for x in "${dev_list[@]}"; do
-        printf '+\n'
-        printf '%s\n' "${dev_attrs[label:$x]}"
-        printf '%s\n' "${dev_attrs[partlabel:$x]}"
-        printf '%s\n' "$x"
+        printf '+\n' || return $?
+        printf '%s\n' "${dev_attrs[label:$x]}" || return $?
+        printf '%s\n' "${dev_attrs[partlabel:$x]}" || return $?
+        printf '%s\n' "$x" || return $?
     done
+}
+
+gen_input() {
+    # We don't want to terminate if a write failed with SIGPIPE here, so let's fork off.
+    # This function doesn't modify any globals anyway.
+    ( gen_input_real; )
 }
 
 declare output_type=
@@ -87,12 +93,13 @@ handle_output() {
         ok)
             ;;
         result)
-            output_type=result
-            IFS= read -r output_value || return $?
-            return
+            if IFS= read -r output_value; then
+                output_type=result
+            fi
+            return 0
             ;;
         *)
-            printf >&2 '%s\n' "WARNING: unsupported line in cmenu output: '$line'";
+            printf >&2 '%s\n' "WARNING: unsupported line in cmenu output: '$line'"
             ;;
         esac
     done
@@ -109,9 +116,9 @@ coproc "$x_mydir"/cmenu \
     -column=:'Device' \
     3<&0 0</dev/null 4>&1 1>&2
 
-gen_input >&${COPROC[1]} || exit $?
+gen_input >&${COPROC[1]}
 
-handle_output <&${COPROC[0]} || exit $?
+handle_output <&${COPROC[0]}
 
 if [[ -n "$COPROC_PID" ]]; then
     wait "$COPROC_PID"
