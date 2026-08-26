@@ -120,7 +120,7 @@ handle_output() {
     return 0
 }
 
-coproc /home/v/repo/cmenu/cpp/cmenu \
+coproc cmenu \
     -infd=3 \
     -outfd=4 \
     -column=:'Label' \

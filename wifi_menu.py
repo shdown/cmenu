@@ -9,7 +9,7 @@ from contextlib import contextmanager
 
 
 CMENU = [
-    '/home/v/repo/cmenu/cpp/cmenu',
+    'cmenu',
     # your -style-{header,hi,entry}=... arguments here
 ]
 

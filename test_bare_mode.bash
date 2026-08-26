@@ -13,7 +13,7 @@ gen_input() {
     printf '%s\n' '+' 'aa' 'Alcoholic Anonymous' 'Organization'
 }
 
-output=$(gen_input | /home/v/repo/cmenu/cpp/cmenu \
+output=$(gen_input | ${CMENU:-cmenu} \
     -mode=bare \
     -require-enter-after-combo="$require_enter_after_combo" \
     -column=@6:'Combo' \
