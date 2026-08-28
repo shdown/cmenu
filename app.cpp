@@ -35,7 +35,6 @@
 #include <memory>
 #include <vector>
 #include <array>
-#include <exception>
 #include <functional>
 #include <stdexcept>
 #include <system_error>
@@ -880,32 +879,8 @@ static ImmutableParams imm_from_args(Args &my_args, FD &&fd_in, FD &&fd_out)
     };
 }
 
-static inline void set_sigpipe_handler(struct sigaction *my_sa)
-{
-    if (sigemptyset(&my_sa->sa_mask) < 0) {
-        throw std::system_error(errno, std::generic_category(), "sigemptyset() failed");
-    }
-    if (sigaction(SIGPIPE, my_sa, nullptr) < 0) {
-        throw std::system_error(errno, std::generic_category(), "sigaction() failed");
-    }
-}
-
 namespace app
 {
-
-void sigpipe_ignore()
-{
-    struct sigaction my_sa = {};
-    my_sa.sa_handler = SIG_IGN;
-    set_sigpipe_handler(&my_sa);
-}
-
-void sigpipe_reset_handler_to_default()
-{
-    struct sigaction my_sa = {};
-    my_sa.sa_handler = SIG_DFL;
-    set_sigpipe_handler(&my_sa);
-}
 
 void run_normal_mode(Args &&my_args)
 {
