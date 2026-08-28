@@ -57,7 +57,6 @@
 #include "bio.hpp"
 #include "fd_utils.hpp"
 #include "int_utils.hpp"
-#include "full_write.hpp"
 #include "poll_utils.hpp"
 #include "cc_storage.hpp"
 #include "combo_storage.hpp"
@@ -72,6 +71,7 @@
 #include "fd.hpp"
 #include "my_assert.hpp"
 #include "truncated_text.hpp"
+#include "writer.hpp"
 
 struct ImmutableParams
 {
@@ -84,7 +84,7 @@ struct ImmutableParams
 
     int esc_delay;
 
-    FD output_fd;
+    Writer output_writer;
 
     Bio input_bio;
 
@@ -158,6 +158,11 @@ struct App
         MY_ASSERT(focused_widget != nullptr);
         return focused_widget;
     }
+
+    bool has_output_writer() const
+    {
+        return !imm.output_writer.is_dummy();
+    }
 };
 
 static void update_dims(App &A)
@@ -217,15 +222,13 @@ static void end_ncurses()
     endwin();
 }
 
-static inline void write_to_output_fd(App &A, std::string_view s, bool do_quit)
+static inline void write_to_output_writer(App &A, std::string_view s, bool do_quit)
 {
-    MY_ASSERT(A.imm.output_fd.is_valid());
+    MY_ASSERT(A.has_output_writer());
 
-    if (!full_write(A.imm.output_fd.raw(), s)) {
-        A.quit_flag = true;
-    } else {
-        A.quit_flag |= do_quit;
-    }
+    A.imm.output_writer.enqueue(s);
+
+    A.quit_flag |= do_quit;
 }
 
 static void do_redraw(App &A)
@@ -298,7 +301,7 @@ static inline void check_sane_index(uint64_t i, const std::string &line)
 static void execute_command_from_bio(App &A, Bio &bio, const std::string &line, bool &should_shrink)
 {
     if (is_single_char_command(line, 'v')) {
-        write_to_output_fd(A, "1\n", false);
+        write_to_output_writer(A, "1\n", false);
 
     } else if (auto [ok, ver] = is_space_and_number_command(line, 'V'); ok) {
         if (ver != 1) {
@@ -360,7 +363,7 @@ static void read_series_from_bio(App &A, Bio &bio)
         return;
     }
 
-    write_to_output_fd(A, "ok\n", false);
+    write_to_output_writer(A, "ok\n", false);
 }
 
 static std::vector<std::vector<TruncatedText>> read_whole_list_from_bio(const ImmutableParams &imm, Bio &bio)
@@ -405,10 +408,13 @@ static bool poll_until_have_ncurses_input(App &A, wint_t &out_c)
         return res;
     };
 
-    const FD &input_fd = A.imm.input_bio.fd();
-    std::array<struct pollfd, 2> pfds{
-        make_pollfd(input_fd.raw(), POLLIN),
-        make_pollfd(0,              POLLIN),
+    int input_fd = A.imm.input_bio.fd().raw();
+    int output_fd = A.imm.output_writer.fd_for_poll();
+
+    std::array<struct pollfd, 3> pfds{
+        make_pollfd(input_fd,  POLLIN),
+        make_pollfd(output_fd, POLLOUT),
+        make_pollfd(0,         POLLIN),
     };
     for (;;) {
         int poll_rc = poll_utils::do_poll(pfds.data(), pfds.size());
@@ -417,7 +423,13 @@ static bool poll_until_have_ncurses_input(App &A, wint_t &out_c)
             read_from_bio(A, A.imm.input_bio);
             return false;
         }
-        if (pfds[1].revents || poll_rc == 0) {
+        if (pfds[1].revents) {
+            if (!A.imm.output_writer.try_write_nonblocking()) {
+                A.quit_flag = true;
+            }
+            return false;
+        }
+        if (pfds[2].revents || poll_rc == 0) {
             int rc = get_wch(&out_c);
             if (rc != ERR) {
                 return true;
@@ -456,7 +468,7 @@ static bool handle_input(App &A, wint_t c)
 
 static void combo_bar_content_finished(App &A, const std::string &combo)
 {
-    if (A.imm.output_fd.is_valid()) {
+    if (A.has_output_writer()) {
         std::string s = "combo";
 
         char delimiter = A.imm.bare_mode ? ' ' : '\n';
@@ -465,7 +477,7 @@ static void combo_bar_content_finished(App &A, const std::string &combo)
         s.append(combo);
         s.push_back('\n');
 
-        write_to_output_fd(A, s, true);
+        write_to_output_writer(A, s, true);
 
     } else {
         A.output_variant = std::make_unique<std::variant<size_t, std::string>>(combo);
@@ -537,14 +549,14 @@ static void event_list_enter(App &A, std::any /*data*/)
         return;
     }
 
-    if (A.imm.output_fd.is_valid()) {
+    if (A.has_output_writer()) {
 
         if (A.imm.arg_flag_persist) {
             std::string s = "enter\n";
             append_uint_to_str(s, A.list->selected_index());
             s.push_back('\n');
 
-            write_to_output_fd(A, s, false);
+            write_to_output_writer(A, s, false);
 
         } else {
             std::string s = "result";
@@ -555,7 +567,7 @@ static void event_list_enter(App &A, std::any /*data*/)
             append_uint_to_str(s, A.list->selected_index());
             s.push_back('\n');
 
-            write_to_output_fd(A, s, true);
+            write_to_output_writer(A, s, true);
         }
 
     } else {
@@ -579,7 +591,7 @@ static void event_list_backslash(App &A, std::any /*data*/)
         append_uint_to_str(s, A.list->selected_index());
         s.push_back('\n');
 
-        write_to_output_fd(A, s, false);
+        write_to_output_writer(A, s, false);
     }
 }
 
@@ -615,14 +627,14 @@ static void event_cc_bar_enter(App &A, std::any data)
             s.push_back('\n');
             append_uint_to_str(s, A.list->selected_index());
             s.push_back('\n');
-            write_to_output_fd(A, s, false);
+            write_to_output_writer(A, s, false);
         }
 
     } else {
         std::string s = "custom\n";
         s.push_back(cmd_ch);
         s.push_back('\n');
-        write_to_output_fd(A, s, false);
+        write_to_output_writer(A, s, false);
     }
 
     A.set_focused(A.list);
@@ -828,21 +840,28 @@ public:
     }
 };
 
-
 template<class F>
 static void guard_and_do_run(App &A, F &&prepare)
 {
     SigmaskGuard sigmask_guard{};
 
     begin_ncurses(A);
+
+    auto finish = [&]() -> void {
+        end_ncurses();
+        if (A.has_output_writer()) {
+            A.imm.output_writer.write_remainder_blocking();
+        }
+    };
+
     try {
         prepare();
         do_run(A);
     } catch (...) {
-        end_ncurses();
+        finish();
         throw;
     }
-    end_ncurses();
+    finish();
 }
 
 static ImmutableParams imm_from_args(Args &my_args, FD &&fd_in, FD &&fd_out)
@@ -854,26 +873,38 @@ static ImmutableParams imm_from_args(Args &my_args, FD &&fd_in, FD &&fd_out)
         my_args.report_backslash,
         my_args.require_enter_after_combo,
         my_args.esc_delay,
-        std::move(fd_out),
+        Writer{std::move(fd_out)},
         Bio{std::move(fd_in)},
         std::move(my_args.cc_storage),
         std::move(my_args.combo_storage),
     };
 }
 
+static inline void set_sigpipe_handler(struct sigaction *my_sa)
+{
+    if (sigemptyset(&my_sa->sa_mask) < 0) {
+        throw std::system_error(errno, std::generic_category(), "sigemptyset() failed");
+    }
+    if (sigaction(SIGPIPE, my_sa, nullptr) < 0) {
+        throw std::system_error(errno, std::generic_category(), "sigaction() failed");
+    }
+}
+
 namespace app
 {
 
-void ignore_sigpipe()
+void sigpipe_ignore()
 {
     struct sigaction my_sa = {};
     my_sa.sa_handler = SIG_IGN;
-    if (sigemptyset(&my_sa.sa_mask) < 0) {
-        throw std::system_error(errno, std::generic_category(), "sigemptyset() failed");
-    }
-    if (sigaction(SIGPIPE, &my_sa, nullptr) < 0) {
-        throw std::system_error(errno, std::generic_category(), "sigaction() failed");
-    }
+    set_sigpipe_handler(&my_sa);
+}
+
+void sigpipe_reset_handler_to_default()
+{
+    struct sigaction my_sa = {};
+    my_sa.sa_handler = SIG_DFL;
+    set_sigpipe_handler(&my_sa);
 }
 
 void run_normal_mode(Args &&my_args)

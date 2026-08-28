@@ -20,7 +20,6 @@ set (common_sources
     truncated_text.cpp
     int_utils.cpp
     style.cpp
-    full_write.cpp
     poll_utils.cpp
     parse_args.cpp
     my_assert.cpp

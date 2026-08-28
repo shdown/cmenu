@@ -27,6 +27,30 @@
 
 #pragma once
 
-#include <string_view>
+#include <errno.h>
+#include <fcntl.h>
+#include <system_error>
 
-bool full_write(int fd, std::string_view s);
+#if EAGAIN == EWOULDBLOCK
+# define IS_EAGAIN(e) ((e) == EAGAIN)
+#else
+# define IS_EAGAIN(e) ((e) == EAGAIN || (e) == EWOULDBLOCK)
+#endif
+
+static inline void set_nonblocking_flag(int fd, bool nb_flag)
+{
+    int flags = fcntl(fd, F_GETFL);
+    if (flags < 0) {
+        throw std::system_error(errno, std::generic_category(), "fcntl() failed");
+    }
+
+    if (nb_flag) {
+        flags |= O_NONBLOCK;
+    } else {
+        flags &= ~O_NONBLOCK;
+    }
+
+    if (fcntl(fd, F_SETFL, flags) < 0) {
+        throw std::system_error(errno, std::generic_category(), "fcntl() failed");
+    }
+}

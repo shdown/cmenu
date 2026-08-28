@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 
         fd_utils::reset_std_fds();
 
-        app::ignore_sigpipe();
+        app::sigpipe_ignore();
 
         if (my_args.bare_mode) {
             app::run_bare_mode(

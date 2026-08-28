@@ -38,7 +38,9 @@
 namespace app
 {
 
-void ignore_sigpipe();
+void sigpipe_ignore();
+
+void sigpipe_reset_handler_to_default();
 
 void run_normal_mode(Args &&my_args);
 
