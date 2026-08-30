@@ -38,6 +38,10 @@
 namespace app
 {
 
+void sigpipe_ignore();
+
+void sigpipe_reset_handler_to_default();
+
 void run_normal_mode(Args &&my_args);
 
 void run_bare_mode(Args &&my_args, FD &&fd_in, FD &&fd_out);

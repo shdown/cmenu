@@ -565,6 +565,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    app::sigpipe_ignore();
+
     std::optional<std::variant<size_t, std::string>> res;
 
     try {
@@ -599,6 +601,8 @@ int main(int argc, char **argv)
     }, *res);
 
     const std::string &cmd = entries.at(res_idx).cmd;
+
+    app::sigpipe_reset_handler_to_default();
 
     try {
         spawn_cmd(cmd, should_exec);
