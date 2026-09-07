@@ -25,9 +25,9 @@
  * For more information, please refer to <https://unlicense.org>
  */
 
-#include <iostream>
 #include <utility>
 #include <exception>
+#include <stdio.h>
 #include "app.hpp"
 #include "parse_args.hpp"
 #include "errors.hpp"
@@ -40,8 +40,8 @@ int main(int argc, char **argv)
     try {
         parse_args(argc, argv, my_args);
     } catch (const CommandLineArgsError &e) {
-        std::cerr << "Wrong USAGE: " << e.what() << std::endl;
-        print_usage(std::cerr, argc == 0 ? "cmenu" : argv[0]);
+        fprintf(stderr, "Wrong USAGE: %s\n", e.what());
+        print_usage(stderr, argc == 0 ? "cmenu" : argv[0]);
         return 2;
     }
 
@@ -67,10 +67,10 @@ int main(int argc, char **argv)
         }
 
     } catch (const CMenuError &e) {
-        std::cerr << e.what() << std::endl;
+        fprintf(stderr, "%s\n", e.what());
         return 1;
     } catch (const std::runtime_error &e) {
-        std::cerr << "Caught error: " << e.what() << std::endl;
+        fprintf(stderr, "Caught error: %s\n", e.what());
         return 1;
     }
     return 0;

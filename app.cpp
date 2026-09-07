@@ -249,7 +249,7 @@ static void do_redraw(App &A)
     refresh();
 }
 
-static void show_info(App &A, const std::string &msg, bool dismissable = true)
+static void show_info(App &A, std::string_view msg, bool dismissable = true)
 {
     A.info_bar->reset(msg, dismissable);
     A.set_focused(A.info_bar);
@@ -466,7 +466,7 @@ static bool handle_input(App &A, wint_t c)
     return handled;
 }
 
-static void combo_bar_content_finished(App &A, const std::string &combo)
+static void combo_bar_content_finished(App &A, std::string_view combo)
 {
     if (A.has_output_writer()) {
         std::string s = "combo";
@@ -480,12 +480,13 @@ static void combo_bar_content_finished(App &A, const std::string &combo)
         write_to_output_writer(A, s, true);
 
     } else {
-        A.output_variant = std::make_unique<std::variant<size_t, std::string>>(combo);
+        A.output_variant = std::make_unique<std::variant<size_t, std::string>>(
+            std::string(combo));
         A.quit_flag = true;
     }
 }
 
-static void combo_bar_content_updated(App &A, const std::string &combo)
+static void combo_bar_content_updated(App &A, std::string_view combo)
 {
     switch (A.imm.combo_storage.lookup(combo)) {
 
@@ -509,7 +510,7 @@ static void combo_bar_content_updated(App &A, const std::string &combo)
 
 static void event_list_info(App &A, std::any data)
 {
-    const std::string &info_str = std::any_cast<std::reference_wrapper<const std::string>>(data);
+    std::string_view info_str = std::any_cast<std::string_view>(data);
     show_info(A, info_str);
 }
 
@@ -533,8 +534,8 @@ static void event_list_to_combo_mode(App &A, std::any data)
 
     A.set_focused(A.combo_bar);
 
-    std::string s(1, c);
-    combo_bar_content_updated(A, s);
+    std::string_view sv{&c, 1};
+    combo_bar_content_updated(A, sv);
 }
 
 static void event_list_quit(App &A, std::any /*data*/)
@@ -659,7 +660,7 @@ static void event_help_screen_leave(App &A, std::any /*data*/)
 
 static void event_combo_bar_enter(App &A, std::any data)
 {
-    const std::string &combo = std::any_cast<std::reference_wrapper<const std::string>>(data);
+    std::string_view combo = std::any_cast<std::string_view>(data);
 
     if (A.imm.combo_storage.lookup(combo) == ComboStorage::LookupResult::EXACT) {
         combo_bar_content_finished(A, combo);
@@ -671,7 +672,7 @@ static void event_combo_bar_enter(App &A, std::any data)
 
 static void event_combo_bar_update(App &A, std::any data)
 {
-    const std::string &combo = std::any_cast<std::reference_wrapper<const std::string>>(data);
+    std::string_view combo = std::any_cast<std::string_view>(data);
     combo_bar_content_updated(A, combo);
 }
 
@@ -684,7 +685,7 @@ template<class T>
 static void do_subscribe(
         App &A,
         std::unique_ptr<T> &widget,
-        const std::string &event_name,
+        std::string_view event_name,
         void (*callback)(App &, std::any)
     )
 {
@@ -744,7 +745,9 @@ static void prepare_to_run(App &A, Args &my_args)
             A.help_screen->add_line("\\", my_args.backslash_descr);
         }
         for (const auto &[cmd, descr] : my_args.cc_descr) {
-            A.help_screen->add_line(std::string(":") + cmd, descr);
+            std::string what = ":";
+            what.push_back(cmd);
+            A.help_screen->add_line(what, descr);
         }
         A.help_screen->done_adding_lines();
         do_subscribe(A, A.help_screen, "leave", event_help_screen_leave);

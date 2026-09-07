@@ -30,7 +30,7 @@
 #include <vector>
 #include <string>
 #include <utility>
-#include <ostream>
+#include <stdio.h>
 #include <curses.h>
 #include "phys.hpp"
 #include "cc_storage.hpp"
@@ -91,4 +91,4 @@ struct Args
 
 void parse_args(int argc, char **argv, Args &dst);
 
-void print_usage(std::ostream &os, const std::string &my_name);
+void print_usage(FILE *stream, const std::string &my_name);

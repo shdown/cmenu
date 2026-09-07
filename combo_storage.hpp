@@ -76,9 +76,9 @@ public:
         return m_data.empty();
     }
 
-    void add(const std::string &s)
+    void add(std::string_view sv)
     {
-        m_data.push_back(s);
+        m_data.emplace_back(sv);
     }
 
     void freeze()
@@ -100,18 +100,18 @@ public:
         return m_data.size();
     }
 
-    LookupResult lookup(const std::string &s) const
+    LookupResult lookup(std::string_view sv) const
     {
         MY_ASSERT(m_frozen);
 
-        auto it = std::lower_bound(m_data.begin(), m_data.end(), s);
+        auto it = std::lower_bound(m_data.begin(), m_data.end(), sv);
         if (it == m_data.end()) {
             return LookupResult::NONE;
         }
-        if (*it == s) {
+        if (*it == sv) {
             return LookupResult::EXACT;
         }
-        if (strview_utils::starts_with(*it, s)) {
+        if (strview_utils::starts_with(*it, sv)) {
             return LookupResult::PREFIX;
         }
         return LookupResult::NONE;

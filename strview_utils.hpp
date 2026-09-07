@@ -28,12 +28,16 @@
 #pragma once
 
 #include <stddef.h>
+#include <limits.h>
 #include <string_view>
 #include <algorithm>
 #include <string>
 #include <vector>
 #include <utility>
+#include <stdexcept>
 #include "my_assert.hpp"
+
+#define SV_FMT(sv) strview_utils::size_as_int_or_throw((sv)), (sv).data()
 
 namespace strview_utils
 {
@@ -93,6 +97,15 @@ namespace strview_utils
     inline std::wstring_view from_wstring(const std::wstring &s, size_t offset, size_t count = -1)
     {
         return from_basic_string(s, offset, count);
+    }
+
+    inline int size_as_int_or_throw(std::string_view sv)
+    {
+        size_t size = sv.size();
+        if (size > static_cast<size_t>(INT_MAX)) {
+            throw std::overflow_error("size of string_view would overflow int");
+        }
+        return size;
     }
 
 } // namespace strview_utils

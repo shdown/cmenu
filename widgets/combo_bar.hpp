@@ -84,7 +84,7 @@ private:
 
     void m_on_enter()
     {
-        m_publisher.emit("enter", std::cref(m_combo));
+        m_publisher.emit("enter", std::string_view(m_combo));
         m_reset();
     }
 
@@ -96,7 +96,7 @@ private:
 
     void m_on_update()
     {
-        m_publisher.emit("update", std::cref(m_combo));
+        m_publisher.emit("update", std::string_view(m_combo));
     }
 
 public:
@@ -111,7 +111,7 @@ public:
         m_combo.reserve(M_NUM_RESERVE);
     }
 
-    virtual void subscribe(const std::string &event_name, Publisher::Handler &&handler) override
+    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }

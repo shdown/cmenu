@@ -43,7 +43,7 @@ public:
 
     virtual void set_dims(PHYS new_w, PHYS new_h) = 0;
 
-    virtual void subscribe(const std::string &event_name, Publisher::Handler &&handler) = 0;
+    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) = 0;
 
     virtual ~Widget() = default;
 };

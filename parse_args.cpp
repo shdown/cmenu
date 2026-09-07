@@ -28,7 +28,6 @@
 #include "parse_args.hpp"
 #include <stddef.h>
 #include <stdint.h>
-#include <ostream>
 #include <vector>
 #include <string_view>
 #include <utility>
@@ -41,7 +40,7 @@
 
 using namespace std::string_view_literals;
 
-using Callback = std::function<void(Args &dst, std::string_view value)>;
+using Callback = void(*)(Args &dst, std::string_view value);
 
 static void parse_input_fd(Args &dst, std::string_view value)
 {
@@ -316,12 +315,12 @@ void parse_args(int argc, char **argv, Args &dst)
     }
 }
 
-void print_usage(std::ostream &os, const std::string &my_name)
+void print_usage(FILE *stream, const std::string &my_name)
 {
-    os << "USAGE: " << my_name << " OPTIONS..." << std::endl;
-    os << "Available OPTIONS:" << std::endl;
+    fprintf(stream, "USAGE: %s OPTIONS...\n", my_name.c_str());
+    fprintf(stream, "Available OPTIONS:\n");
 
     for (const Option &opt : VALID_OPTIONS) {
-        os << " " << opt.prefix << opt.metavar << std::endl;
+        fprintf(stream, " %.*s%.*s\n", SV_FMT(opt.prefix), SV_FMT(opt.metavar));
     }
 }

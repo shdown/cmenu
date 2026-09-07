@@ -257,7 +257,7 @@ private:
 
         res.append(" ---");
 
-        m_publisher.emit("info", std::cref(res));
+        m_publisher.emit("info", std::string_view(res));
     }
 
 public:
@@ -375,7 +375,7 @@ public:
         move(m_scr_selected_y.to_int(), 0);
     }
 
-    virtual void subscribe(const std::string &event_name, Publisher::Handler &&handler) override
+    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }

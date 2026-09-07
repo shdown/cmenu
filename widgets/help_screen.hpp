@@ -80,8 +80,11 @@ private:
         );
     }
 
-    void m_set_info(const std::string &suffix)
+    void m_set_info(std::string_view suffix)
     {
+        m_info.clear();
+        m_info.shrink_to_fit();
+
         m_info = "[Help screen; press ESC]";
         if (!suffix.empty()) {
             m_info += " ";
@@ -106,7 +109,7 @@ public:
         m_set_info("");
 
         m_list->subscribe("info", [this](std::any data) -> void {
-            const std::string &info_str = std::any_cast<std::reference_wrapper<const std::string>>(data);
+            std::string_view info_str = std::any_cast<std::string_view>(data);
             this->m_set_info(info_str);
         });
 
@@ -119,7 +122,7 @@ public:
         });
     }
 
-    void add_line(const std::string &keys, const std::string &descr)
+    void add_line(std::string_view keys, std::string_view descr)
     {
         m_list->add({
             TruncatedText(decode(keys)),
@@ -137,7 +140,7 @@ public:
         return m_list->empty();
     }
 
-    virtual void subscribe(const std::string &event_name, Publisher::Handler &&handler) override
+    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }

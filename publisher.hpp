@@ -47,17 +47,19 @@ public:
         : m_map{}
     {}
 
-    void connect(const std::string &event_name, Handler &&handler)
+    void connect(std::string_view event_name, Handler &&handler)
     {
         for (const auto &[s, _] : m_map) {
             if (s == event_name) {
-                throw std::logic_error("already subscribed to event " + event_name);
+                throw std::logic_error(
+                    "already subscribed to event " + std::string(event_name)
+                );
             }
         }
         m_map.emplace_back(event_name, std::move(handler));
     }
 
-    void emit(const std::string &event_name, std::any data = {})
+    void emit(std::string_view event_name, std::any data = {})
     {
         for (const auto &[s, handler] : m_map) {
             if (s == event_name) {

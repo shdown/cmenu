@@ -60,7 +60,7 @@ public:
         m_modebyte = '\0';
     }
 
-    virtual void subscribe(const std::string &event_name, Publisher::Handler &&handler) override
+    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }

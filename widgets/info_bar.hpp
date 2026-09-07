@@ -57,13 +57,16 @@ public:
         , m_publisher{}
     {}
 
-    virtual void subscribe(const std::string &event_name, Publisher::Handler &&handler) override
+    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }
 
-    void reset(const std::string &text, bool dismissable)
+    void reset(std::string_view text, bool dismissable)
     {
+        m_text.clear();
+        m_text.shrink_to_fit();
+
         m_dismissable = dismissable;
         m_text = text;
         if (dismissable) {

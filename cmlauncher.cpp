@@ -41,10 +41,10 @@
 #include <stdexcept>
 #include <vector>
 #include <utility>
-#include <iostream>
 #include "app.hpp"
 #include "parse_args.hpp"
 #include "errors.hpp"
+#include "strview_utils.hpp"
 
 namespace cfile
 {
@@ -492,10 +492,15 @@ int main(int argc, char **argv)
 {
     auto print_usage = [&]() -> void {
         std::string my_name = (argc == 0) ? "cmlauncher" : argv[0];
-        std::cerr << "USAGE: " << my_name;
-        std::cerr << " [-L:exec]";
-        std::cerr << " [pass-through cmenu options...]";
-        std::cerr << " [--] <INI_FILE>" << std::endl;
+        fprintf(
+            stderr,
+            "USAGE: %s "
+            "[-L:exec] "
+            "[pass-through cmenu options...] "
+            "[--] "
+            "<INI_FILE>\n",
+            my_name.c_str()
+        );
     };
 
     FakeArgvFactory faf;
@@ -504,7 +509,7 @@ int main(int argc, char **argv)
     try {
         launcher_parse_args::parse_args(argc, argv, faf, ini_path, should_exec);
     } catch (const launcher_parse_args::WrongUsageError &e) {
-        std::cerr << "Wrong USAGE: " << e.what() << std::endl;
+        fprintf(stderr, "Wrong USAGE: %s\n", e.what());
         print_usage();
         return 2;
     }
@@ -513,10 +518,10 @@ int main(int argc, char **argv)
     try {
         entries = read_entries_from_file(ini_path);
     } catch (const BadLine &e) {
-        std::cerr << "Cannot parse " << ini_path << ": " << e.what() << std::endl;
+        fprintf(stderr, "Cannot parse %s: %s\n", ini_path.c_str(), e.what());
         return 1;
     } catch (const std::system_error &e) {
-        std::cerr << "Error reading from " << ini_path << ": " << e.what() << std::endl;
+        fprintf(stderr, "Error reading from %s: %s\n", ini_path.c_str(), e.what());
         return 1;
     }
 
@@ -539,7 +544,7 @@ int main(int argc, char **argv)
 
     std::vector<char *> fake_argv = faf.finalize();
     if (fake_argv.size() > static_cast<size_t>(INT_MAX)) {
-        std::cerr << "Fake argv size would overflow int." << std::endl;
+        fprintf(stderr, "Fake argv size would overflow int.\n");
         return 1;
     }
 
@@ -547,21 +552,21 @@ int main(int argc, char **argv)
     try {
         parse_args(fake_argv.size(), fake_argv.data(), my_args);
     } catch (const CommandLineArgsError &e) {
-        std::cerr << "Bad pass-through cmenu option passed: " << e.what() << std::endl;
+        fprintf(stderr, "Bad pass-through cmenu option passed: %s\n", e.what());
         print_usage();
         return 2;
     }
 
     if (!my_args.bare_mode) {
-        std::cerr << "Passing '-mode=normal' is prohibited." << std::endl;
+        fprintf(stderr, "Passing '-mode=normal' is prohibited.\n");
         return 1;
     }
     if (my_args.headers.size() != 2) {
-        std::cerr << "Passing '-column=...' arguments is prohibited." << std::endl;
+        fprintf(stderr, "Passing '-column=...' arguments is prohibited.\n");
         return 1;
     }
     if (my_args.combo_storage.num_unique() != num_combos) {
-        std::cerr << "Passing '-combo=...' arguments is prohibited." << std::endl;
+        fprintf(stderr, "Passing '-combo=...' arguments is prohibited.\n");
         return 1;
     }
 
@@ -572,7 +577,7 @@ int main(int argc, char **argv)
     try {
         res = app::run_bare_mode_sync(std::move(my_args), columns);
     } catch (const std::runtime_error &e) {
-        std::cerr << "Caught error: " << e.what() << std::endl;
+        fprintf(stderr, "Caught error: %s\n", e.what());
         return 1;
     }
 
@@ -607,7 +612,7 @@ int main(int argc, char **argv)
     try {
         spawn_cmd(cmd, should_exec);
     } catch (const std::runtime_error &e) {
-        std::cerr << "Cannot spawn command: " << e.what() << std::endl;
+        fprintf(stderr, "Cannot spawn command: %s\n", e.what());
         return 1;
     }
 

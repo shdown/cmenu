@@ -26,6 +26,8 @@ set (common_sources
     fd_utils.cpp
 )
 
+set (XXX_HARDENING_DEFINES -D_GLIBCXX_ASSERTIONS -D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_FAST)
+
 include (CheckSymbolExists)
 set (CMAKE_REQUIRED_DEFINITIONS "-D_XOPEN_SOURCE=500")
 check_symbol_exists (wcwidth "wchar.h" HAVE_WCWIDTH)
@@ -44,7 +46,12 @@ include (GNUInstallDirs)
 function (my_add_executable executable_name main_file)
     add_executable (${executable_name} ${common_sources} ${main_file})
 
-    target_compile_definitions (${executable_name} PUBLIC -D_GLIBCXX_ASSERTIONS -D_POSIX_C_SOURCE=200809L)
+    target_compile_definitions (
+        ${executable_name}
+        PUBLIC
+        ${XXX_HARDENING_DEFINES}
+        -D_POSIX_C_SOURCE=200809L
+    )
 
     target_include_directories (${executable_name} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
