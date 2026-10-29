@@ -88,17 +88,17 @@ public:
         , m_fd{fd}
     {}
 
-    int which_fd() const
+    int which_fd() const noexcept
     {
         return m_fd;
     }
 };
 
-class DuplicatedComboError : public std::runtime_error
+class DuplicatedComboError : public CommandLineArgsError
 {
 public:
-    explicit DuplicatedComboError(const std::string &combo)
-        : std::runtime_error("duplicated combo '" + combo + "'")
+    explicit DuplicatedComboError(const std::string &msg)
+        : CommandLineArgsError(msg)
     {}
 };
 

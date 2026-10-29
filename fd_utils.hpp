@@ -28,15 +28,20 @@
 #pragma once
 
 #include <utility>
-#include "fd.hpp"
+#include <string>
+#include "common/fd.hpp"
 
 namespace fd_utils
 {
 
 void check_fd(int fd);
 
-void reset_std_fds();
+void reset_stdin_and_stdout_fds();
 
 std::pair<FD, FD> copy_stdin_and_stdout_fds();
+
+FD open_tty_to_prevent_sighup();
+
+void redirect_std_fds_to_safe_place(const std::string &custom_stderr_file);
 
 } // namespace fd_utils

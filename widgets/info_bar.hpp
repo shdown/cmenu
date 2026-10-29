@@ -57,7 +57,7 @@ public:
         , m_publisher{}
     {}
 
-    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
+    void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }
@@ -74,17 +74,17 @@ public:
         }
     }
 
-    bool dismissable() const
+    bool dismissable() const noexcept
     {
         return m_dismissable;
     }
 
-    virtual void set_dims(PHYS new_w, PHYS /*new_h*/) override
+    void set_dims(PHYS new_w, PHYS /*new_h*/) override
     {
         m_scr_width = new_w;
     }
 
-    virtual bool handle_input(wint_t c) override
+    bool handle_input(wint_t c) override
     {
         if (is_enter(c)) {
             if (m_dismissable) {
@@ -95,7 +95,7 @@ public:
         return false;
     }
 
-    virtual void draw() override
+    void draw() override
     {
         attr_set(m_style.a, m_style.cpn, nullptr);
         mvhline(0, 0, ' ', m_scr_width.to_int());
@@ -104,7 +104,7 @@ public:
         mvaddnstr(0, 0, m_text.data(), PHYS::from(w).to_int());
     }
 
-    virtual void focus() override
+    void focus() override
     {
         move(0, 0);
     }

@@ -25,32 +25,63 @@
  * For more information, please refer to <https://unlicense.org>
  */
 
-#pragma once
+#include "int_utils.hpp"
+#include <stdexcept>
+#include <stddef.h>
+#include <stdint.h>
+#include <string>
+#include "arith_utils.hpp"
 
-#include <errno.h>
-#include <fcntl.h>
-#include <system_error>
-
-#if EAGAIN == EWOULDBLOCK
-# define IS_EAGAIN(e) ((e) == EAGAIN)
-#else
-# define IS_EAGAIN(e) ((e) == EAGAIN || (e) == EWOULDBLOCK)
-#endif
-
-static inline void set_nonblocking_flag(int fd, bool nb_flag)
+namespace int_utils
 {
-    int flags = fcntl(fd, F_GETFL);
-    if (flags < 0) {
-        throw std::system_error(errno, std::generic_category(), "fcntl() failed");
+
+uint64_t parse_uint_with_limit(std::string_view s, uint64_t max)
+{
+    if (s.empty()) {
+        throw CannotParse("empty span");
     }
 
-    if (nb_flag) {
-        flags |= O_NONBLOCK;
-    } else {
-        flags &= ~O_NONBLOCK;
-    }
+    uint64_t r = 0;
 
-    if (fcntl(fd, F_SETFL, flags) < 0) {
-        throw std::system_error(errno, std::generic_category(), "fcntl() failed");
+    for (char c : s) {
+        unsigned char digit = c - '0';
+        if (digit > 9) {
+            throw CannotParse("invalid digit");
+        }
+        if (!arith_utils::mul_is_ok<uint64_t>(r, 10)) {
+            throw CannotParse("overflow");
+        }
+        if (!arith_utils::add_is_ok<uint64_t>(r, digit)) {
+            throw CannotParse("overflow");
+        }
+    }
+    if (r > max) {
+        throw CannotParse("overflow");
+    }
+    return r;
+}
+
+static inline int get_num_digits(uint64_t x) noexcept
+{
+    int res = 0;
+    do {
+        x /= 10;
+        ++res;
+    } while (x);
+    return res;
+}
+
+void append_uint_to_str(std::string &s, uint64_t x)
+{
+    int ndigits = get_num_digits(x);
+
+    size_t old_size = s.size();
+    s.resize(old_size + ndigits);
+
+    for (int i = ndigits - 1; i >= 0; --i) {
+        s[old_size + i] = '0' + (x % 10);
+        x /= 10;
     }
 }
+
+} // namespace int_utils

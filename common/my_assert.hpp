@@ -27,20 +27,31 @@
 
 #pragma once
 
-#include <string>
-#include <string_view>
-#include <limits>
-#include <type_traits>
-#include <stdint.h>
+#include "compdep.hpp"
 
-uint64_t parse_uint_with_limit(std::string_view s, uint64_t max);
+[[noreturn]]
+void my_assert_failed_(
+        const char *expr,
+        const char *file,
+        int line,
+        const char *func
+    ) noexcept;
 
-template<class T>
-static inline T parse_uint_as(std::string_view s)
-{
-    static_assert(std::is_integral_v<T>, "T must be an integral type");
+[[noreturn]]
+void my_panic_with_errnum_impl_(
+        const char *msg,
+        int errnum,
+        const char *file,
+        int line,
+        const char *func
+    ) noexcept;
 
-    return parse_uint_with_limit(s, std::numeric_limits<T>::max());
-}
+#define MY_ASSERT(cond) \
+    do { \
+        if (UNLIKELY(!(cond))) { \
+            my_assert_failed_(#cond, __FILE__, __LINE__, __func__); \
+        } \
+    } while (0)
 
-void append_uint_to_str(std::string &s, uint64_t x);
+#define MY_PANIC_WITH_ERRNUM(msg, errnum) \
+    my_panic_with_errnum_impl_((msg), (errnum), __FILE__, __LINE__, __func__)

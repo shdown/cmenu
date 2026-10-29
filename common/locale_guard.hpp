@@ -25,58 +25,49 @@
  * For more information, please refer to <https://unlicense.org>
  */
 
-#include "int_utils.hpp"
-#include <stddef.h>
-#include <stdint.h>
-#include <string>
-#include "errors.hpp"
-#include "arith_utils.hpp"
+#pragma once
 
-uint64_t parse_uint_with_limit(std::string_view s, uint64_t max)
+#include <locale.h>
+#include <errno.h>
+#include <system_error>
+#include "my_assert.hpp"
+
+class LocaleGuard
 {
-    if (s.empty()) {
-        throw ParseError("empty span");
-    }
+private:
+    locale_t m_native;
+    locale_t m_old;
 
-    uint64_t r = 0;
+public:
+    LocaleGuard(const char *locname)
+        : m_native{}
+        , m_old{}
+    {
+        MY_ASSERT(locname != nullptr);
 
-    for (char c : s) {
-        unsigned char digit = c - '0';
-        if (digit > 9) {
-            throw ParseError("invalid digit");
+        locale_t bad_locale = static_cast<locale_t>(0);
+
+        m_native = newlocale(LC_ALL_MASK, locname, bad_locale);
+        if (m_native == bad_locale) {
+            throw std::system_error(errno, std::generic_category(), "newlocale() failed");
         }
-        if (!arith_utils::mul_is_ok<uint64_t>(r, 10)) {
-            throw ParseError("overflow");
+        m_old = uselocale(m_native);
+        if (m_old == bad_locale) {
+            freelocale(m_native);
+            throw std::system_error(errno, std::generic_category(), "uselocale() failed");
         }
-        if (!arith_utils::add_is_ok<uint64_t>(r, digit)) {
-            throw ParseError("overflow");
-        }
     }
-    if (r > max) {
-        throw ParseError("overflow");
+
+    LocaleGuard(const LocaleGuard &) = delete;
+    LocaleGuard(LocaleGuard &&) = delete;
+
+    LocaleGuard &operator =(const LocaleGuard &) = delete;
+    LocaleGuard &operator =(LocaleGuard &&) = delete;
+
+    ~LocaleGuard()
+    {
+        freelocale(m_native);
+        uselocale(m_old);
     }
-    return r;
-}
+};
 
-static inline int get_num_digits(uint64_t x)
-{
-    int res = 0;
-    do {
-        x /= 10;
-        ++res;
-    } while (x);
-    return res;
-}
-
-void append_uint_to_str(std::string &s, uint64_t x)
-{
-    int ndigits = get_num_digits(x);
-
-    size_t old_size = s.size();
-    s.resize(old_size + ndigits);
-
-    for (int i = ndigits - 1; i >= 0; --i) {
-        s[old_size + i] = '0' + (x % 10);
-        x /= 10;
-    }
-}

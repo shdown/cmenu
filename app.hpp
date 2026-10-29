@@ -28,19 +28,20 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 #include <vector>
 #include <string>
 #include <variant>
 #include <optional>
 #include "parse_args.hpp"
-#include "fd.hpp"
+#include "common/fd.hpp"
 
 namespace app
 {
 
-void sigpipe_ignore();
+void sigpipe_ignore() noexcept;
 
-void sigpipe_reset_handler_to_default();
+void sigpipe_reset_handler_to_default() noexcept;
 
 void run_normal_mode(Args &&my_args);
 
@@ -48,6 +49,7 @@ void run_bare_mode(Args &&my_args, FD &&fd_in, FD &&fd_out);
 
 std::optional<std::variant<size_t, std::string>> run_bare_mode_sync(
         Args &&my_args,
-        const std::vector<std::vector<std::string>> &entries);
+        const std::vector<std::vector<std::string>> &entries,
+        const std::vector<uint8_t> &styles = {});
 
 } // namespace app

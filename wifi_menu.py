@@ -296,20 +296,33 @@ def network_list_dialog(conn, device):
         while True:
             new_nets = list(conn.fetch_networks(device))
             delta = network_list.add_and_get_delta(new_nets)
+            num_alter_style = sum(1 for _, index, _, _ in delta if index is not None)
+            num_total_commands = len(delta) + num_alter_style
+            __i = 0
             try:
-                out_f.write(f'n {len(delta)}\n')
+                out_f.write(f'n {num_total_commands}\n')
                 for command, index, net, is_available in delta:
                     if index is not None:
                         out_f.write(f'{command} {index}\n')
                     else:
                         out_f.write(f'{command}\n')
+
                     for column in net_to_columns(net, is_available):
                         out_f.write(column)
                         out_f.write('\n')
+
+                    __i += 1
+
+                    if index is not None:
+                        out_f.write(f'* {0 if is_available else 1} {index}\n')
+                        __i += 1
+
                 out_f.flush()
             except OSError:
                 line = None
                 break
+
+            assert __i == num_total_commands
 
             line = read_line_from_fd(in_fd)
             if line != 'ok\n':

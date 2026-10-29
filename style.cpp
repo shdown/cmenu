@@ -29,49 +29,56 @@
 #include <vector>
 #include <string>
 #include <string_view>
-#include "int_utils.hpp"
+#include "common/int_utils.hpp"
+#include "common/strview_utils.hpp"
 #include "errors.hpp"
-#include "strview_utils.hpp"
 
-using namespace std::string_view_literals;
+static short parse_color_num(std::string_view s)
+{
+    try {
+        return int_utils::parse_uint_as<short>(s);
+    } catch (const int_utils::CannotParse &e) {
+        throw ParseError(std::string("cannot parse f= or b= segment: ") + e.what());
+    }
+}
 
 static void parse_segment(RawStyle &rs, std::string_view s)
 {
-    if (s == "normal"sv) {
+    if (s == "normal") {
         return;
     }
-    if (s == "bold"sv) {
+    if (s == "bold") {
         rs.a |= A_BOLD;
         return;
     }
-    if (s == "blink"sv) {
+    if (s == "blink") {
         rs.a |= A_BLINK;
         return;
     }
-    if (s == "dim"sv) {
+    if (s == "dim") {
         rs.a |= A_DIM;
         return;
     }
-    if (s == "reverse"sv) {
+    if (s == "reverse") {
         rs.a |= A_REVERSE;
         return;
     }
-    if (s == "standout"sv) {
+    if (s == "standout") {
         rs.a |= A_STANDOUT;
         return;
     }
-    if (s == "underline"sv) {
+    if (s == "underline") {
         rs.a |= A_UNDERLINE;
         return;
     }
 
-    if (auto [ok, suffix] = strview_utils::follow(s, "f="sv); ok) {
-        rs.fc = parse_uint_as<short>(suffix);
+    if (auto [ok, suffix] = strview_utils::follow(s, "f="); ok) {
+        rs.fc = parse_color_num(suffix);
         return;
     }
 
-    if (auto [ok, suffix] = strview_utils::follow(s, "b="sv); ok) {
-        rs.bc = parse_uint_as<short>(suffix);
+    if (auto [ok, suffix] = strview_utils::follow(s, "b="); ok) {
+        rs.bc = parse_color_num(suffix);
         return;
     }
 

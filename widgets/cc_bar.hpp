@@ -48,24 +48,24 @@ private:
     PHYS m_y;
 
 public:
-    CCBar()
+    CCBar() noexcept
         : m_modebyte{'\0'}
         , m_has_enough_space{false}
         , m_publisher{}
         , m_y{0}
     {}
 
-    void reset()
+    void reset() noexcept
     {
         m_modebyte = '\0';
     }
 
-    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
+    void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }
 
-    virtual void draw() override
+    void draw() override
     {
         if (!m_has_enough_space) {
             return;
@@ -80,7 +80,7 @@ public:
         mvaddnwstr(m_y.to_int(), 0, str.data(), m_modebyte ? 2 : 1);
     }
 
-    virtual void focus() override
+    void focus() override
     {
         if (!m_has_enough_space) {
             return;
@@ -90,7 +90,7 @@ public:
         move(m_y.to_int(), x);
     }
 
-    virtual bool handle_input(wint_t c) override
+    bool handle_input(wint_t c) override
     {
         if (is_backspace(c) || c == ctrl('h')) {
             if (m_modebyte) {
@@ -125,7 +125,7 @@ public:
         }
     }
 
-    virtual void set_dims(PHYS new_w, PHYS new_h) override
+    void set_dims(PHYS new_w, PHYS new_h) override
     {
         m_has_enough_space = new_w >= PHYS{3};
         m_y = new_h ? new_h - PHYS{1} : PHYS{0};

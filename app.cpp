@@ -42,7 +42,6 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <wchar.h>
-#include <locale.h>
 #include <curses.h>
 #include <poll.h>
 #include <errno.h>
@@ -54,9 +53,14 @@
 #include "widgets/cc_bar.hpp"
 #include "widgets/combo_bar.hpp"
 #include "widgets/help_screen.hpp"
+#include "common/fd.hpp"
+#include "common/my_assert.hpp"
+#include "common/getenv_r.hpp"
+#include "common/int_utils.hpp"
+#include "common/strview_utils.hpp"
+#include "common/locale_guard.hpp"
 #include "bio.hpp"
 #include "fd_utils.hpp"
-#include "int_utils.hpp"
 #include "poll_utils.hpp"
 #include "cc_storage.hpp"
 #include "combo_storage.hpp"
@@ -65,13 +69,13 @@
 #include "style.hpp"
 #include "phys.hpp"
 #include "decode.hpp"
-#include "strview_utils.hpp"
 #include "cmenu_styles.hpp"
 #include "errors.hpp"
-#include "fd.hpp"
-#include "my_assert.hpp"
 #include "truncated_text.hpp"
 #include "writer.hpp"
+#if WITH_LATENCY_DEBUG
+# include "latency_debug.hpp"
+#endif
 
 struct ImmutableParams
 {
@@ -138,7 +142,7 @@ struct App
     }
 
     template<class T>
-    bool is_focused(const std::unique_ptr<T> &ptr) const
+    bool is_focused(const std::unique_ptr<T> &ptr) const noexcept
     {
         static_assert(std::is_base_of_v<Widget, T>, "T must inherit from Widget");
 
@@ -146,20 +150,20 @@ struct App
     }
 
     template<class T>
-    void set_focused(const std::unique_ptr<T> &ptr)
+    void set_focused(const std::unique_ptr<T> &ptr) noexcept
     {
         static_assert(std::is_base_of_v<Widget, T>, "T must inherit from Widget");
 
         focused_widget = ptr.get();
     }
 
-    Widget *which_focused()
+    Widget *which_focused() noexcept
     {
         MY_ASSERT(focused_widget != nullptr);
         return focused_widget;
     }
 
-    bool has_output_writer() const
+    bool has_output_writer() const noexcept
     {
         return !imm.output_writer.is_dummy();
     }
@@ -185,16 +189,16 @@ static void update_dims(App &A)
     }
 }
 
-static void set_ncurses_esc_delay(int esc_delay)
+static void set_ncurses_esc_delay(int esc_delay) noexcept
 {
     if (esc_delay >= 0) {
         set_escdelay(esc_delay);
-    } else if (getenv("ESCDELAY") == nullptr) {
+    } else if (getenv_r("ESCDELAY") == nullptr) {
         set_escdelay(50);
     }
 }
 
-static void begin_ncurses(App &A)
+static void begin_ncurses(App &A) noexcept
 {
     initscr();
 
@@ -216,7 +220,7 @@ static void begin_ncurses(App &A)
     set_ncurses_esc_delay(A.imm.esc_delay);
 }
 
-static void end_ncurses()
+static void end_ncurses() noexcept
 {
     clear();
     endwin();
@@ -268,12 +272,12 @@ static std::vector<TruncatedText> read_entry_from_bio(const ImmutableParams &imm
     return res;
 }
 
-static inline bool is_single_char_command(const std::string &line, char command)
+static inline bool is_single_char_command(const std::string &line, char command) noexcept
 {
     return line.size() == 1 && line[0] == command;
 }
 
-static std::pair<bool, uint64_t> is_space_and_number_command(const std::string &line, char command)
+static std::pair<bool, uint64_t> is_space_and_number_command(const std::string &line, char command) noexcept
 {
     if (line.size() < 3) {
         return {false, 0};
@@ -281,14 +285,42 @@ static std::pair<bool, uint64_t> is_space_and_number_command(const std::string &
     if (line[0] != command || line[1] != ' ') {
         return {false, 0};
     }
-    std::string_view sv = strview_utils::from_string(line, 2);
+
     uint64_t res;
     try {
-        res = parse_uint_as<uint64_t>(sv);
-    } catch (const ParseError &) {
+        res = int_utils::parse_uint_as<uint64_t>(strview_utils::from_string(line, 2));
+    } catch (const int_utils::CannotParse &) {
         return {false, 0};
     }
     return {true, res};
+}
+
+static std::tuple<bool, uint64_t, uint64_t> is_space_and_two_numbers_command(
+        const std::string &line,
+        char command
+    ) noexcept
+{
+    if (line.size() < 3) {
+        return {false, 0, 0};
+    }
+    if (line[0] != command || line[1] != ' ') {
+        return {false, 0, 0};
+    }
+
+    auto [ok, word1, word2] = strview_utils::split_once(strview_utils::from_string(line, 2), ' ');
+    if (!ok) {
+        return {false, 0, 0};
+    }
+
+    uint64_t res1;
+    uint64_t res2;
+    try {
+        res1 = int_utils::parse_uint_as<uint64_t>(word1);
+        res2 = int_utils::parse_uint_as<uint64_t>(word2);
+    } catch (const int_utils::CannotParse &) {
+        return {false, 0, 0};
+    }
+    return {true, res1, res2};
 }
 
 static inline void check_sane_index(uint64_t i, const std::string &line)
@@ -314,6 +346,17 @@ static void execute_command_from_bio(App &A, Bio &bio, const std::string &line, 
     } else if (is_single_char_command(line, 'W')) {
         A.set_focused(A.list);
 
+    } else if (is_single_char_command(line, '<')) {
+        size_t res = A.list->empty() ? 0 : A.list->selected_index();
+        write_to_output_writer(A, std::to_string(res) + "\n", false);
+
+    } else if (auto [ok, i] = is_space_and_number_command(line, '>'); ok) {
+        check_sane_index(i, line);
+        if (!A.list->is_valid_index(i)) {
+            throw ProtocolError("invalid list index", line);
+        }
+        A.list->set_selected_index(i);
+
     } else if (is_single_char_command(line, '+')) {
         A.list->add(read_entry_from_bio(A.imm, bio));
 
@@ -331,6 +374,19 @@ static void execute_command_from_bio(App &A, Bio &bio, const std::string &line, 
         }
         A.list->del(i);
         should_shrink = true;
+
+    } else if (auto [ok, style_idx, elem_idx] = is_space_and_two_numbers_command(line, '*'); ok) {
+
+        check_sane_index(elem_idx, line);
+        if (!A.list->is_valid_index(elem_idx)) {
+            throw ProtocolError("invalid list index", line);
+        }
+
+        if (style_idx > 255 || !A.list->is_valid_style_index(style_idx)) {
+            throw ProtocolError("invalid style index", line);
+        }
+
+        A.list->alter_style(style_idx, elem_idx);
 
     } else if (is_single_char_command(line, 'x')) {
         A.list->clear();
@@ -366,9 +422,20 @@ static void read_series_from_bio(App &A, Bio &bio)
     write_to_output_writer(A, "ok\n", false);
 }
 
-static std::vector<std::vector<TruncatedText>> read_whole_list_from_bio(const ImmutableParams &imm, Bio &bio)
+static void read_whole_list_from_bio(
+        const ImmutableParams &imm,
+        Bio &bio,
+        std::vector<std::vector<TruncatedText>> &res,
+        std::vector<uint8_t> &res_styles)
 {
     std::string header_line = bio.read_line();
+    bool with_styles = false;
+
+    if (header_line == "?") {
+        with_styles = true;
+        header_line = bio.read_line();
+    }
+
     auto [ok, n_u64] = is_space_and_number_command(header_line, 'N');
     if (!ok) {
         throw ProtocolError("expected command pack ('N NUMBER')", header_line);
@@ -379,8 +446,10 @@ static std::vector<std::vector<TruncatedText>> read_whole_list_from_bio(const Im
     }
     size_t n{static_cast<size_t>(n_u64)};
 
-    std::vector<std::vector<TruncatedText>> res;
     res.reserve(n);
+    if (with_styles) {
+        res_styles.reserve(n);
+    }
 
     for (size_t i = 0; i < n; ++i) {
         std::string line = bio.read_line();
@@ -388,8 +457,21 @@ static std::vector<std::vector<TruncatedText>> read_whole_list_from_bio(const Im
             throw ProtocolError("expected command '+'", line);
         }
         res.push_back(read_entry_from_bio(imm, bio));
+
+        if (with_styles) {
+            line = bio.read_line();
+            uint64_t style_idx;
+            try {
+                style_idx = int_utils::parse_uint_as<uint64_t>(line);
+            } catch (const int_utils::CannotParse &e) {
+                throw ProtocolError("cannot parse style index", line);
+            }
+            if (style_idx > 255) {
+                throw ProtocolError("invalid style index", line);
+            }
+            res_styles.push_back(style_idx);
+        }
     }
-    return res;
 }
 
 static void read_from_bio(App &A, Bio &bio)
@@ -519,8 +601,6 @@ static void event_list_to_command_mode(App &A, std::any /*data*/)
     if (A.cc_bar) {
         A.cc_bar->reset();
         A.set_focused(A.cc_bar);
-    } else {
-        show_info(A, "Bare mode, custom commands are not supported");
     }
 }
 
@@ -554,7 +634,7 @@ static void event_list_enter(App &A, std::any /*data*/)
 
         if (A.imm.arg_flag_persist) {
             std::string s = "enter\n";
-            append_uint_to_str(s, A.list->selected_index());
+            int_utils::append_uint_to_str(s, A.list->selected_index());
             s.push_back('\n');
 
             write_to_output_writer(A, s, false);
@@ -565,7 +645,7 @@ static void event_list_enter(App &A, std::any /*data*/)
             char delimiter = A.imm.bare_mode ? ' ' : '\n';
             s.push_back(delimiter);
 
-            append_uint_to_str(s, A.list->selected_index());
+            int_utils::append_uint_to_str(s, A.list->selected_index());
             s.push_back('\n');
 
             write_to_output_writer(A, s, true);
@@ -580,7 +660,6 @@ static void event_list_enter(App &A, std::any /*data*/)
 static void event_list_backslash(App &A, std::any /*data*/)
 {
     if (!A.imm.arg_flag_report_backslash) {
-        show_info(A, "Backslash is not supported");
         return;
     }
 
@@ -589,7 +668,7 @@ static void event_list_backslash(App &A, std::any /*data*/)
 
     } else {
         std::string s = "backslash\n";
-        append_uint_to_str(s, A.list->selected_index());
+        int_utils::append_uint_to_str(s, A.list->selected_index());
         s.push_back('\n');
 
         write_to_output_writer(A, s, false);
@@ -626,7 +705,7 @@ static void event_cc_bar_enter(App &A, std::any data)
             std::string s = "custom\n";
             s.push_back(cmd_ch);
             s.push_back('\n');
-            append_uint_to_str(s, A.list->selected_index());
+            int_utils::append_uint_to_str(s, A.list->selected_index());
             s.push_back('\n');
             write_to_output_writer(A, s, false);
         }
@@ -646,7 +725,7 @@ static void event_cc_bar_help(App &A, std::any /*data*/)
     MY_ASSERT(A.help_screen);
 
     if (A.help_screen->empty()) {
-        show_info(A, "No help because no extra keys defined");
+        show_info(A, "No help because no extra keys are defined");
     } else {
         A.help_screen->reset();
         A.set_focused(A.help_screen);
@@ -698,12 +777,22 @@ static void do_subscribe(
 
 static void prepare_to_run(App &A, Args &my_args)
 {
-    CMenuStyles my_styles{
-        intern_style(my_args.style_header, 1),
-        intern_style(my_args.style_hi,     2),
-        intern_style(my_args.style_entry,  3),
-        intern_style(my_args.style_error,  4),
-    };
+    CMenuStyles my_styles{};
+    {
+        unsigned short next_cpn = 1;
+
+        my_styles.style_header = intern_style(my_args.style_header, next_cpn++);
+        my_styles.style_hi = intern_style(my_args.style_hi, next_cpn++);
+        my_styles.style_entry = intern_style(my_args.style_entry, next_cpn++);
+        my_styles.style_error = intern_style(my_args.style_error, next_cpn++);
+
+        MY_ASSERT(my_args.alt_styles.size() <= CMenuStyles::MAX_ALT_STYLES);
+
+        my_styles.alt.reserve(my_args.alt_styles.size());
+        for (RawStyle style : my_args.alt_styles) {
+            my_styles.alt.push_back(intern_style(style, next_cpn++));
+        }
+    }
 
     std::vector<TruncatedText> headers;
     headers.reserve(A.imm.num_cols);
@@ -761,6 +850,10 @@ static void do_run(App &A)
     update_dims(A);
     do_redraw(A);
 
+#if WITH_LATENCY_DEBUG
+    write_latency_debug_info();
+#endif
+
     while (!A.quit_flag) {
         wint_t c;
         if (poll_until_have_ncurses_input(A, c)) {
@@ -788,7 +881,7 @@ private:
     sigset_t m_old;
 
 public:
-    SigmaskGuard()
+    SigmaskGuard() noexcept
         : m_old{}
     {
         poll_utils::setup_sigmask(m_old);
@@ -803,43 +896,6 @@ public:
     ~SigmaskGuard()
     {
         poll_utils::restore_sigmask(m_old);
-    }
-};
-
-class LocaleGuard
-{
-private:
-    locale_t m_native;
-    locale_t m_old;
-
-public:
-    LocaleGuard()
-        : m_native{}
-        , m_old{}
-    {
-        locale_t bad_locale = static_cast<locale_t>(0);
-
-        m_native = newlocale(LC_ALL_MASK, "", bad_locale);
-        if (m_native == bad_locale) {
-            throw std::system_error(errno, std::generic_category(), "newlocale() failed");
-        }
-        m_old = uselocale(m_native);
-        if (m_old == bad_locale) {
-            freelocale(m_native);
-            throw std::system_error(errno, std::generic_category(), "uselocale() failed");
-        }
-    }
-
-    LocaleGuard(const LocaleGuard &) = delete;
-    LocaleGuard(LocaleGuard &&) = delete;
-
-    LocaleGuard &operator =(const LocaleGuard &) = delete;
-    LocaleGuard &operator =(LocaleGuard &&) = delete;
-
-    ~LocaleGuard()
-    {
-        freelocale(m_native);
-        uselocale(m_old);
     }
 };
 
@@ -883,27 +939,27 @@ static ImmutableParams imm_from_args(Args &my_args, FD &&fd_in, FD &&fd_out)
     };
 }
 
-static inline void set_sigpipe_handler(struct sigaction *my_sa)
+static inline void set_sigpipe_handler(struct sigaction *my_sa) noexcept
 {
     if (sigemptyset(&my_sa->sa_mask) < 0) {
-        throw std::system_error(errno, std::generic_category(), "sigemptyset() failed");
+        MY_PANIC_WITH_ERRNUM("sigemptyset() failed", errno);
     }
     if (sigaction(SIGPIPE, my_sa, nullptr) < 0) {
-        throw std::system_error(errno, std::generic_category(), "sigaction() failed");
+        MY_PANIC_WITH_ERRNUM("sigaction() failed", errno);
     }
 }
 
 namespace app
 {
 
-void sigpipe_ignore()
+void sigpipe_ignore() noexcept
 {
     struct sigaction my_sa = {};
     my_sa.sa_handler = SIG_IGN;
     set_sigpipe_handler(&my_sa);
 }
 
-void sigpipe_reset_handler_to_default()
+void sigpipe_reset_handler_to_default() noexcept
 {
     struct sigaction my_sa = {};
     my_sa.sa_handler = SIG_DFL;
@@ -918,7 +974,7 @@ void run_normal_mode(Args &&my_args)
     do_check_fd("Input FD", input_fd.raw());
     do_check_fd("Output FD", output_fd.raw());
 
-    LocaleGuard locale_guard{};
+    LocaleGuard locale_guard{""};
 
     App A{imm_from_args(
         my_args,
@@ -933,16 +989,17 @@ void run_normal_mode(Args &&my_args)
 
 void run_bare_mode(Args &&my_args, FD &&fd_in, FD &&fd_out)
 {
-    LocaleGuard locale_guard{};
+    LocaleGuard locale_guard{""};
 
     ImmutableParams imm = imm_from_args(my_args, FD{}, std::move(fd_out));
 
     std::vector<std::vector<TruncatedText>> whole_list;
+    std::vector<uint8_t> whole_list_styles;
 
     {
         Bio my_bio{std::move(fd_in)};
         try {
-            whole_list = read_whole_list_from_bio(imm, my_bio);
+            read_whole_list_from_bio(imm, my_bio, whole_list, whole_list_styles);
         } catch (const EofError &) {
             throw CMenuError("Unexpected end-of-file while reading from stdin");
         } catch (const ProtocolError &e) {
@@ -959,15 +1016,29 @@ void run_bare_mode(Args &&my_args, FD &&fd_in, FD &&fd_out)
         for (auto &entry : whole_list) {
             A.list->add(std::move(entry));
         }
+
+        for (size_t i = 0; i < whole_list_styles.size(); ++i) {
+            uint8_t style_idx = whole_list_styles[i];
+            if (!A.list->is_valid_style_index(style_idx)) {
+                throw CMenuError("Invalid style index read from stdin: " + std::to_string(style_idx));
+            }
+            A.list->alter_style(style_idx, i);
+        }
+
         A.list->shrink();
+
+        if (A.list->is_valid_index(my_args.default_selection)) {
+            A.list->set_selected_index(my_args.default_selection);
+        }
     });
 }
 
 std::optional<std::variant<size_t, std::string>> run_bare_mode_sync(
         Args &&my_args,
-        const std::vector<std::vector<std::string>> &entries)
+        const std::vector<std::vector<std::string>> &entries,
+        const std::vector<uint8_t> &styles)
 {
-    LocaleGuard locale_guard{};
+    LocaleGuard locale_guard{""};
 
     App A{imm_from_args(my_args, FD{}, FD{})};
 
@@ -987,7 +1058,25 @@ std::optional<std::variant<size_t, std::string>> run_bare_mode_sync(
             }
             A.list->add(std::move(tt_entries));
         }
+
+        if (!styles.empty()) {
+            if (styles.size() != entries.size()) {
+                throw std::logic_error("size of styles does not match the size of entries");
+            }
+            for (size_t i = 0; i < styles.size(); ++i) {
+                uint8_t style_idx = styles[i];
+                if (!A.list->is_valid_style_index(style_idx)) {
+                    throw CMenuError("Invalid style index: " + std::to_string(style_idx));
+                }
+                A.list->alter_style(style_idx, i);
+            }
+        }
+
         A.list->shrink();
+
+        if (A.list->is_valid_index(my_args.default_selection)) {
+            A.list->set_selected_index(my_args.default_selection);
+        }
     });
 
     if (A.output_variant) {

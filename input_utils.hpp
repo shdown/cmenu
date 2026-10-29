@@ -30,17 +30,17 @@
 #include <wchar.h>
 #include <curses.h>
 
-static inline wint_t ctrl(char x)
+static inline wint_t ctrl(char x) noexcept
 {
     return x & 0x1F;
 }
 
-static inline bool is_backspace(wint_t c)
+static inline bool is_backspace(wint_t c) noexcept
 {
     return c == 127 || c == L'\b' || c == KEY_BACKSPACE;
 }
 
-static inline bool is_enter(wint_t c)
+static inline bool is_enter(wint_t c) noexcept
 {
     return c == L'\n' || c == L'\r' || c == KEY_ENTER;
 }

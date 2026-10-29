@@ -25,17 +25,58 @@
  * For more information, please refer to <https://unlicense.org>
  */
 
-#include "my_assert.hpp"
+#pragma once
 
-#include <stdio.h>
-#include <exception>
+#include <unistd.h>
+#include <utility>
 
-void my_assert_failed_(const char *expr, const char *file, int line, const char *func)
+class FD
 {
-    fprintf(
-        stderr, "FATAL: MY_ASSERT(%s) at %s:%d in %s failed.\nAborting.\n",
-        expr, file, line, func
-    );
-    fflush(stderr);
-    std::terminate();
-}
+private:
+    int m_fd;
+
+public:
+    FD() noexcept : m_fd{-1} {}
+
+    explicit FD(int fd) noexcept : m_fd{fd} {}
+
+    FD(FD &&that) noexcept
+        : m_fd{that.m_fd}
+    {
+        that.m_fd = -1;
+    }
+
+    FD(const FD &) = delete;
+
+    FD &operator =(FD &&that) noexcept
+    {
+        std::swap(m_fd, that.m_fd);
+        return *this;
+    }
+
+    FD &operator =(const FD &) = delete;
+
+    bool is_valid() const noexcept
+    {
+        return m_fd >= 0;
+    }
+
+    int raw() const noexcept
+    {
+        return m_fd;
+    }
+
+    int release() noexcept
+    {
+        int res = m_fd;
+        m_fd = -1;
+        return res;
+    }
+
+    ~FD()
+    {
+        if (m_fd >= 0) {
+            close(m_fd);
+        }
+    }
+};

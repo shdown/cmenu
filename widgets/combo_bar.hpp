@@ -37,6 +37,8 @@
 #include <functional>
 #include <algorithm>
 
+#include "../common/my_assert.hpp"
+#include "../common/strview_utils.hpp"
 #include "../column_type.hpp"
 #include "../phys.hpp"
 #include "../widget.hpp"
@@ -44,8 +46,6 @@
 #include "../input_utils.hpp"
 #include "../combo_storage.hpp"
 #include "../style.hpp"
-#include "../my_assert.hpp"
-#include "../strview_utils.hpp"
 
 class ComboBar : public Widget
 {
@@ -59,7 +59,7 @@ private:
     InternedStyle m_style_error;
     Publisher m_publisher;
 
-    std::pair<bool, std::string_view> m_calc_suffix() const
+    std::pair<bool, std::string_view> m_calc_suffix() const noexcept
     {
         size_t w = m_scr_width.raw();
         if (w < 2) {
@@ -111,12 +111,12 @@ public:
         m_combo.reserve(M_NUM_RESERVE);
     }
 
-    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
+    void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }
 
-    void reset()
+    void reset() noexcept
     {
         m_reset();
     }
@@ -127,18 +127,18 @@ public:
         m_combo.push_back(c);
     }
 
-    void set_minus_symbol(bool new_val)
+    void set_minus_symbol(bool new_val) noexcept
     {
         m_minus_symbol = new_val;
     }
 
-    virtual void set_dims(PHYS new_w, PHYS new_h) override
+    void set_dims(PHYS new_w, PHYS new_h) override
     {
         m_scr_width = new_w;
         m_y = new_h ? new_h - PHYS{1} : PHYS{0};
     }
 
-    virtual bool handle_input(wint_t c) override
+    bool handle_input(wint_t c) override
     {
         if (m_combo.empty()) {
             return false;
@@ -171,7 +171,7 @@ public:
         }
     }
 
-    virtual void draw() override
+    void draw() override
     {
         auto [with_lt_symbol, suffix] = m_calc_suffix();
 
@@ -198,7 +198,7 @@ public:
         }
     }
 
-    virtual void focus() override
+    void focus() override
     {
         auto [with_lt_symbol, suffix] = m_calc_suffix();
 

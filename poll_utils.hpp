@@ -34,10 +34,10 @@
 namespace poll_utils
 {
 
-int do_poll(struct pollfd *pfds, size_t num_pfds);
+int do_poll(struct pollfd *pfds, size_t num_pfds) noexcept;
 
-void setup_sigmask(sigset_t &old);
+void setup_sigmask(sigset_t &old) noexcept;
 
-void restore_sigmask(const sigset_t &old);
+void restore_sigmask(const sigset_t &old) noexcept;
 
 } // namespace poll_utils

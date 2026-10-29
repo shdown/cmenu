@@ -39,21 +39,22 @@
 #include <string_view>
 #include <utility>
 
+#include "../common/my_assert.hpp"
+#include "../common/arith_utils.hpp"
+
 #include "../publisher.hpp"
 #include "../style.hpp"
 #include "../widget.hpp"
 #include "../phys.hpp"
 #include "../truncated_text.hpp"
-#include "../my_assert.hpp"
 #include "../input_utils.hpp"
-#include "../arith_utils.hpp"
 #include "../column_type.hpp"
 #include "../combo_storage.hpp"
 #include "../cmenu_styles.hpp"
 
 namespace list_details
 {
-    inline PHYS sum_over_widths(
+    static inline PHYS sum_over_widths(
             const std::vector<std::pair<ColumnType, PHYS>> &vec,
             ColumnType filter_by_type)
     {
@@ -66,7 +67,7 @@ namespace list_details
         return sum;
     }
 
-    inline size_t add_limit(size_t a, size_t b, size_t limit)
+    static inline size_t add_limit(size_t a, size_t b, size_t limit) noexcept
     {
         if (!arith_utils::add_is_ok(a, b)) {
             return limit;
@@ -74,7 +75,7 @@ namespace list_details
         return std::min(a, limit);
     }
 
-    inline size_t sub_wrap0(size_t a, size_t b)
+    static inline size_t sub_wrap0(size_t a, size_t b) noexcept
     {
         if (a < b) {
             return 0;
@@ -87,19 +88,6 @@ namespace list_details
 class List : public Widget
 {
 private:
-    struct ListStyles
-    {
-        InternedStyle style_header;
-        InternedStyle style_entry;
-        InternedStyle style_hi;
-
-        explicit ListStyles(const CMenuStyles &styles)
-            : style_header{styles.style_header}
-            , style_entry{styles.style_entry}
-            , style_hi{styles.style_hi}
-        {}
-    };
-
     // Number of columns.
     size_t m_num_cols;
 
@@ -110,9 +98,10 @@ private:
     // Headers and lines.
     std::vector<TruncatedText> m_headers;
     std::vector<std::vector<TruncatedText>> m_lines;
+    std::vector<uint8_t> m_line_styles;
 
     // Styles.
-    ListStyles m_styles;
+    CMenuStyles m_styles;
 
     // Index of the selected entry. If size is zero, then selected is also zero.
     size_t m_selected;
@@ -184,17 +173,17 @@ private:
         return true;
     }
 
-    void m_selection_to_end()
+    void m_selection_to_end() noexcept
     {
         m_selected = m_lines.empty() ? 0 : m_lines.size() - 1;
     }
 
-    void m_selection_to_home()
+    void m_selection_to_home() noexcept
     {
         m_selected = 0;
     }
 
-    void m_selection_up_one_line_wrap_around()
+    void m_selection_up_one_line_wrap_around() noexcept
     {
         if (m_selected == 0) {
             m_selected = m_lines.empty() ? 0 : m_lines.size() - 1;
@@ -203,7 +192,7 @@ private:
         }
     }
 
-    void m_selection_down_one_line_wrap_around()
+    void m_selection_down_one_line_wrap_around() noexcept
     {
         ++m_selected;
         if (m_selected >= m_lines.size()) {
@@ -211,7 +200,7 @@ private:
         }
     }
 
-    void m_selection_up(PHYS lines)
+    void m_selection_up(PHYS lines) noexcept
     {
         if (m_selected < lines.raw()) {
             m_selected = 0;
@@ -220,7 +209,7 @@ private:
         }
     }
 
-    void m_selection_down(PHYS lines)
+    void m_selection_down(PHYS lines) noexcept
     {
         if (m_lines.empty()) {
             m_selected = 0;
@@ -272,6 +261,7 @@ public:
         , m_CW(m_num_cols, PHYS{0})
         , m_headers(std::move(headers))
         , m_lines{}
+        , m_line_styles{0}
         , m_styles{styles}
         , m_selected{0}
         , m_scr_width{0}
@@ -281,35 +271,59 @@ public:
         , m_vi_keys{vi_keys}
     {}
 
-    bool empty() const
+    bool empty() const noexcept
     {
         return m_lines.empty();
     }
 
-    bool is_valid_index(size_t i) const
+    bool is_valid_style_index(uint8_t i) const noexcept
+    {
+        if (i == 0) {
+            return true;
+        }
+        uint8_t vector_index = i - 1;
+        return vector_index < m_styles.alt.size();
+    }
+
+    bool is_valid_index(size_t i) const noexcept
     {
         return i < m_lines.size();
     }
 
-    size_t selected_index() const
+    size_t selected_index() const noexcept
     {
         MY_ASSERT(!empty());
         return m_selected;
     }
 
-    size_t num_columns() const
+    void set_selected_index(size_t i) noexcept
+    {
+        MY_ASSERT(is_valid_index(i));
+        m_selected = i;
+    }
+
+    size_t num_columns() const noexcept
     {
         return m_num_cols;
     }
 
-    void reset_selection()
+    void reset_selection() noexcept
     {
         m_selected = 0;
+    }
+
+    void alter_style(uint8_t style_idx, size_t entry_idx) noexcept
+    {
+        MY_ASSERT(is_valid_style_index(style_idx));
+        MY_ASSERT(is_valid_index(entry_idx));
+
+        m_line_styles[entry_idx] = style_idx;
     }
 
     void add(std::vector<TruncatedText> &&new_entry)
     {
         m_lines.push_back(std::move(new_entry));
+        m_line_styles.push_back(0);
     }
 
     void set(size_t idx, std::vector<TruncatedText> &&new_entry)
@@ -321,20 +335,23 @@ public:
     void del(size_t idx)
     {
         MY_ASSERT(is_valid_index(idx));
-        m_lines.erase(m_lines.begin() + idx);
+        m_lines      .erase(m_lines.begin()       + idx);
+        m_line_styles.erase(m_line_styles.begin() + idx);
     }
 
     void clear()
     {
         m_lines.clear();
+        m_line_styles.clear();
     }
 
     void shrink()
     {
         m_lines.shrink_to_fit();
+        m_line_styles.shrink_to_fit();
     }
 
-    virtual void draw() override
+    void draw() override
     {
         bool we_have_enough_size = m_update_column_widths();
 
@@ -364,23 +381,28 @@ public:
                 m_scr_selected_y = cur_y;
                 style = m_styles.style_hi;
             } else {
-                style = m_styles.style_entry;
+                uint8_t style_idx = m_line_styles[i];
+                if (style_idx == 0) {
+                    style = m_styles.style_entry;
+                } else {
+                    style = m_styles.alt[style_idx - 1];
+                }
             }
             m_draw_line(cur_y, m_lines[i], style);
         }
     }
 
-    virtual void focus() override
+    void focus() override
     {
         move(m_scr_selected_y.to_int(), 0);
     }
 
-    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
+    void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }
 
-    virtual bool handle_input(wint_t c) override
+    bool handle_input(wint_t c) override
     {
         if (c == KEY_UP || c == ctrl('p') || (m_vi_keys && c == 'k')) {
             m_selection_up_one_line_wrap_around();
@@ -447,7 +469,7 @@ public:
         return false;
     }
 
-    virtual void set_dims(PHYS new_w, PHYS new_h) override
+    void set_dims(PHYS new_w, PHYS new_h) override
     {
         m_scr_width = new_w;
         m_scr_height = new_h;

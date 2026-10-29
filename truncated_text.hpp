@@ -32,7 +32,7 @@
 #include <string_view>
 #include <utility>
 #include "phys.hpp"
-#include "strview_utils.hpp"
+#include "common/strview_utils.hpp"
 
 class TruncatedText
 {
@@ -49,9 +49,9 @@ public:
     {
     }
 
-    void truncate_to_width(PHYS width);
+    void truncate_to_width(PHYS width) noexcept;
 
-    std::wstring_view result() const
+    std::wstring_view result() const noexcept
     {
         return strview_utils::from_wstring(m_str, 0, m_truncated_n);
     }

@@ -31,12 +31,12 @@
 #include <stddef.h>
 #include <array>
 #include <algorithm>
-#include "my_assert.hpp"
+#include "common/my_assert.hpp"
 
 class CCStorage
 {
 public:
-    static bool is_valid_symbol(char c)
+    static bool is_valid_symbol(char c) noexcept
     {
         if ('0' <= c && c <= '9') {
             return true;
@@ -61,7 +61,7 @@ private:
         WITHOUT_INDEX,
     };
 
-    static size_t m_into_index(char c)
+    static size_t m_into_index(char c) noexcept
     {
         MY_ASSERT(static_cast<unsigned char>(c) < 128);
         return c;
@@ -82,7 +82,7 @@ public:
     CCStorage &operator =(CCStorage &&) = default;
     CCStorage &operator =(const CCStorage &) = delete;
 
-    bool is_empty() const
+    bool is_empty() const noexcept
     {
         for (State st : m_states) {
             if (st != State::NONE) {
@@ -92,7 +92,7 @@ public:
         return true;
     }
 
-    bool add(char c, bool with_index)
+    bool add(char c, bool with_index) noexcept
     {
         size_t i = m_into_index(c);
         if (m_states[i] != State::NONE) {
@@ -102,7 +102,7 @@ public:
         return true;
     }
 
-    bool lookup(char c, bool &out_with_index) const
+    bool lookup(char c, bool &out_with_index) const noexcept
     {
         size_t i = m_into_index(c);
         if (m_states[i] == State::NONE) {

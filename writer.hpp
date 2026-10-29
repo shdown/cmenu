@@ -35,10 +35,10 @@
 #include <system_error>
 #include <stdexcept>
 #include <utility>
-#include "fd.hpp"
-#include "os_utils.hpp"
-#include "strview_utils.hpp"
-#include "my_assert.hpp"
+#include "common/fd.hpp"
+#include "common/os_utils.hpp"
+#include "common/strview_utils.hpp"
+#include "common/my_assert.hpp"
 
 class Writer
 {
@@ -84,16 +84,16 @@ public:
         , m_fd{std::move(fd)}
     {
         if (m_fd.is_valid()) {
-            set_nonblocking_flag(m_fd.raw(), true);
+            set_nonblocking_flag_or_die(m_fd.raw(), true);
         }
     }
 
-    bool is_dummy() const
+    bool is_dummy() const noexcept
     {
         return !m_fd.is_valid();
     }
 
-    bool has_something_to_write() const
+    bool has_something_to_write() const noexcept
     {
         return !m_queue.empty();
     }
@@ -105,17 +105,17 @@ public:
         m_queue.append(chunk);
     }
 
-    FD &fd()
+    FD &fd() noexcept
     {
         return m_fd;
     }
 
-    const FD &fd() const
+    const FD &fd() const noexcept
     {
         return m_fd;
     }
 
-    int fd_for_poll() const
+    int fd_for_poll() const noexcept
     {
         return has_something_to_write() ? m_fd.raw() : -1;
     }
@@ -140,7 +140,7 @@ public:
     {
         MY_ASSERT(!is_dummy());
 
-        set_nonblocking_flag(m_fd.raw(), false);
+        set_nonblocking_flag_or_die(m_fd.raw(), false);
 
         std::string_view data = strview_utils::from_string(m_queue, m_queue_pos);
 

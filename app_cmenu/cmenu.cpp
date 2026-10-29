@@ -25,49 +25,53 @@
  * For more information, please refer to <https://unlicense.org>
  */
 
-#pragma once
+#include <utility>
+#include <exception>
+#include <stdio.h>
+#include "../common/fd.hpp"
+#include "../app.hpp"
+#include "../parse_args.hpp"
+#include "../errors.hpp"
+#include "../fd_utils.hpp"
 
-#include <limits.h>
-#include <type_traits>
-#include <limits>
-
-namespace arith_utils
+int main(int argc, char **argv)
 {
-    template<class T>
-    static inline bool mul_is_ok(T &x, T y)
-    {
-        static_assert(std::is_unsigned_v<T>, "T must be unsigned");
-
-        T max = std::numeric_limits<T>::max();
-        if (y && x > max / y) {
-            return false;
-        }
-        x *= y;
-        return true;
+    Args my_args;
+    try {
+        parse_args(argc, argv, my_args);
+    } catch (const CommandLineArgsError &e) {
+        fprintf(stderr, "Wrong USAGE: %s\n", e.what());
+        print_usage(stderr, argc == 0 ? "cmenu" : argv[0]);
+        return 2;
     }
 
-    template<class T>
-    static inline bool add_is_ok(T &x, T y)
-    {
-        static_assert(std::is_unsigned_v<T>, "T must be unsigned");
+    try {
 
-        T res = x + y;
-        if (res < y) {
-            return false;
+        std::pair<FD, FD> bare_mode_inout;
+        if (my_args.bare_mode) {
+            bare_mode_inout = fd_utils::copy_stdin_and_stdout_fds();
         }
-        x = res;
-        return true;
-    }
 
-    template<class T>
-    static inline int to_int_saturate(T x)
-    {
-        static_assert(std::is_unsigned_v<T>, "T must be unsigned");
+        fd_utils::reset_stdin_and_stdout_fds();
 
-        if (x > INT_MAX) {
-            return INT_MAX;
+        app::sigpipe_ignore();
+
+        if (my_args.bare_mode) {
+            app::run_bare_mode(
+                std::move(my_args),
+                std::move(bare_mode_inout.first),
+                std::move(bare_mode_inout.second)
+            );
+        } else {
+            app::run_normal_mode(std::move(my_args));
         }
-        return x;
-    }
 
-} // namespace arith_utils
+    } catch (const CMenuError &e) {
+        fprintf(stderr, "%s\n", e.what());
+        return 1;
+    } catch (const std::runtime_error &e) {
+        fprintf(stderr, "Caught error: %s\n", e.what());
+        return 1;
+    }
+    return 0;
+}

@@ -56,13 +56,16 @@ parse_attr partlabel
 declare -a dev_list=()
 
 fill_dev_list() {
-    local line
     if (( ${#devs[@]} == 0 )); then
         return
     fi
+
+    local sorted_list=$(printf '%s\n' "${!devs[@]}" | sort) || return $?
+
+    local line
     while IFS= read -r line; do
         dev_list+=("$line")
-    done < <(printf '%s\n' "${!devs[@]}" | sort)
+    done <<< "$sorted_list"
 }
 fill_dev_list
 

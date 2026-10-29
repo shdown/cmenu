@@ -38,9 +38,9 @@
 #include <any>
 #include <functional>
 #include <algorithm>
+#include "../common/arith_utils.hpp"
+#include "../common/strview_utils.hpp"
 #include "../phys.hpp"
-#include "../arith_utils.hpp"
-#include "../strview_utils.hpp"
 #include "../truncated_text.hpp"
 #include "../decode.hpp"
 #include "../style.hpp"
@@ -135,17 +135,17 @@ public:
         m_list->shrink();
     }
 
-    bool empty() const
+    bool empty() const noexcept
     {
         return m_list->empty();
     }
 
-    virtual void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
+    void subscribe(std::string_view event_name, Publisher::Handler &&handler) override
     {
         m_publisher.connect(event_name, std::move(handler));
     }
 
-    virtual void draw() override
+    void draw() override
     {
         m_list->draw();
 
@@ -168,17 +168,17 @@ public:
         }
     }
 
-    virtual void focus() override
+    void focus() override
     {
         m_list->focus();
     }
 
-    virtual bool handle_input(wint_t c) override
+    bool handle_input(wint_t c) override
     {
         return m_list->handle_input(c);
     }
 
-    virtual void set_dims(PHYS new_w, PHYS new_h) override
+    void set_dims(PHYS new_w, PHYS new_h) override
     {
         m_scr_width = new_w;
         m_scr_height = new_h;

@@ -31,7 +31,7 @@
 #include <limits.h>
 #include <type_traits>
 #include "errors.hpp"
-#include "arith_utils.hpp"
+#include "common/arith_utils.hpp"
 
 class PHYS
 {
@@ -39,7 +39,7 @@ private:
     uint32_t m_val;
 
 public:
-    explicit PHYS(uint32_t val)
+    explicit PHYS(uint32_t val) noexcept
         : m_val{val}
     {}
 
@@ -115,26 +115,26 @@ public:
         return copy;
     }
 
-    bool operator  <(PHYS other) const { return m_val <  other.m_val; }
-    bool operator  >(PHYS other) const { return m_val >  other.m_val; }
+    bool operator  <(PHYS other) const noexcept { return m_val <  other.m_val; }
+    bool operator  >(PHYS other) const noexcept { return m_val >  other.m_val; }
 
-    bool operator <=(PHYS other) const { return m_val <= other.m_val; }
-    bool operator >=(PHYS other) const { return m_val >= other.m_val; }
+    bool operator <=(PHYS other) const noexcept { return m_val <= other.m_val; }
+    bool operator >=(PHYS other) const noexcept { return m_val >= other.m_val; }
 
-    bool operator ==(PHYS other) const { return m_val == other.m_val; }
-    bool operator !=(PHYS other) const { return m_val != other.m_val; }
+    bool operator ==(PHYS other) const noexcept { return m_val == other.m_val; }
+    bool operator !=(PHYS other) const noexcept { return m_val != other.m_val; }
 
-    explicit operator bool() const
+    explicit operator bool() const noexcept
     {
         return m_val != 0;
     }
 
-    bool operator !() const
+    bool operator !() const noexcept
     {
         return m_val == 0;
     }
 
-    uint32_t raw() const
+    uint32_t raw() const noexcept
     {
         return m_val;
     }

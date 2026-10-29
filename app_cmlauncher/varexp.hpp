@@ -27,14 +27,29 @@
 
 #pragma once
 
-#include "compdep.hpp"
+#include <string>
+#include <string_view>
+#include <stdexcept>
+#include <vector>
 
-[[noreturn]]
-void my_assert_failed_(const char *expr, const char *file, int line, const char *func);
+namespace varexp
+{
 
-#define MY_ASSERT(cond) \
-    do { \
-        if (UNLIKELY(!(cond))) { \
-            my_assert_failed_(#cond, __FILE__, __LINE__, __func__); \
-        } \
-    } while (0)
+class VarexpError : public std::runtime_error
+{
+public:
+    explicit VarexpError(const std::string &msg)
+        : std::runtime_error(msg)
+    {}
+};
+
+bool is_valid_variable_name(std::string_view sv) noexcept;
+
+bool may_have_expansions(std::string_view sv) noexcept;
+
+std::string expand(
+        std::string_view sv,
+        const std::vector<std::pair<std::string, std::string>> &vars
+    );
+
+} // namespace varexp

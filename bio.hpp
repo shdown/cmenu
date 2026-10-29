@@ -36,7 +36,8 @@
 #include <system_error>
 #include <utility>
 #include <stdexcept>
-#include "fd.hpp"
+#include "common/fd.hpp"
+#include "common/my_assert.hpp"
 #include "errors.hpp"
 
 class Bio
@@ -51,9 +52,7 @@ private:
 
     size_t m_raw_read()
     {
-        if (!m_fd.is_valid()) {
-            throw std::logic_error("trying to read from a dummy Bio");
-        }
+        MY_ASSERT(m_fd.is_valid());
 
         ssize_t r;
         while ((r = read(m_fd.raw(), m_buf.data(), M_BUF_SIZE)) < 0 && errno == EINTR) {
@@ -109,17 +108,12 @@ public:
         return line;
     }
 
-    bool has_something() const
+    bool has_something() const noexcept
     {
         return m_buf_pos != m_buf_end;
     }
 
-    FD &fd()
-    {
-        return m_fd;
-    }
-
-    const FD &fd() const
+    const FD &fd() const noexcept
     {
         return m_fd;
     }

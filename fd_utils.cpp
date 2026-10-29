@@ -33,17 +33,17 @@
 #include <string>
 #include <errno.h>
 #include <sys/stat.h>
-#include "fd.hpp"
+#include "common/fd.hpp"
 #include "errors.hpp"
 
-static FD do_open(const std::string &path, int flags)
+static FD do_open(const char *path, int flags)
 {
-    int res = open(path.c_str(), flags);
+    int res = open(path, flags);
     if (res < 0) {
         throw std::system_error(
             errno,
             std::generic_category(),
-            "open() on " + path + " failed"
+            std::string("open() on ") + path + " failed"
         );
     }
     return FD{res};
@@ -75,6 +75,11 @@ static FD do_duplicate_fd(int old_fd)
 
 static void ensure_std_fds_opened()
 {
+    static bool we_were_already_called = false;
+    if (we_were_already_called) {
+        return;
+    }
+
     for (;;) {
         FD fd = do_open("/dev/null", O_RDWR);
         if (fd.raw() > 2) {
@@ -83,6 +88,8 @@ static void ensure_std_fds_opened()
         // We purposefully leak 'fd' here.
         fd.release();
     }
+
+    we_were_already_called = true;
 }
 
 namespace fd_utils
@@ -96,7 +103,7 @@ void check_fd(int fd)
     }
 }
 
-void reset_std_fds()
+void reset_stdin_and_stdout_fds()
 {
     ensure_std_fds_opened();
 
@@ -116,6 +123,27 @@ std::pair<FD, FD> copy_stdin_and_stdout_fds()
     FD stdout_fd = do_duplicate_fd(1);
 
     return {std::move(stdin_fd), std::move(stdout_fd)};
+}
+
+FD open_tty_to_prevent_sighup()
+{
+    return do_open("/dev/tty", O_RDWR | O_CLOEXEC);
+}
+
+void redirect_std_fds_to_safe_place(const std::string &custom_stderr_file)
+{
+    ensure_std_fds_opened();
+
+    FD devnull_fd = do_open("/dev/null", O_RDWR);
+    do_duplicate_fd_into(devnull_fd.raw(), 0);
+    do_duplicate_fd_into(devnull_fd.raw(), 1);
+
+    if (custom_stderr_file.empty()) {
+        do_duplicate_fd_into(devnull_fd.raw(), 2);
+    } else {
+        FD custom_stderr_fd = do_open(custom_stderr_file.c_str(), O_WRONLY | O_APPEND);
+        do_duplicate_fd_into(custom_stderr_fd.raw(), 2);
+    }
 }
 
 } // namespace fd_utils

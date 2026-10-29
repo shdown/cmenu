@@ -31,38 +31,35 @@
 #include <signal.h>
 #include <errno.h>
 #include <stddef.h>
-#include <system_error>
 #include <stdexcept>
 #include <limits>
 
-#include "probes.generated.h"
+#include "common/my_assert.hpp"
 
-static void throw_for_errnum(int errnum)
-{
-    throw std::system_error(errnum, std::generic_category(), "unexpected failure of low-level C function");
-}
+#include "probes.generated.hpp"
 
-static inline void checkcfunc_pth_style(int rc)
-{
-    if (rc != 0) {
-        throw_for_errnum(rc);
-    }
-}
+#define checkcfunc_pth_style(rc) \
+    do { \
+        int tmp_rc_ = (rc); \
+        if (tmp_rc_ != 0) { \
+            MY_PANIC_WITH_ERRNUM("unexpected failure of low-level C function", tmp_rc_); \
+        } \
+    } while (0)
 
-static inline void checkcfunc(int rc)
-{
-    if (rc < 0) {
-        throw_for_errnum(errno);
-    }
-}
+#define checkcfunc(rc) \
+    do { \
+        if ((rc) < 0) { \
+            MY_PANIC_WITH_ERRNUM("unexpected failure of low-level C function", errno); \
+        } \
+    } while (0)
 
 #if HAVE_PPOLL
-static int do_protected_poll(struct pollfd *pfds, nfds_t num_pfds, const sigset_t *ss)
+static int do_protected_poll(struct pollfd *pfds, nfds_t num_pfds, const sigset_t *ss) noexcept
 {
     return ppoll(pfds, num_pfds, nullptr, ss);
 }
 #else
-static int do_protected_poll(struct pollfd *pfds, nfds_t num_pfds, const sigset_t *ss)
+static int do_protected_poll(struct pollfd *pfds, nfds_t num_pfds, const sigset_t *ss) noexcept
 {
     sigset_t ss_orig;
     checkcfunc_pth_style(pthread_sigmask(SIG_SETMASK, ss, &ss_orig));
@@ -80,10 +77,10 @@ static int do_protected_poll(struct pollfd *pfds, nfds_t num_pfds, const sigset_
 namespace poll_utils
 {
 
-int do_poll(struct pollfd *pfds, size_t num_pfds)
+int do_poll(struct pollfd *pfds, size_t num_pfds) noexcept
 {
     if (num_pfds > std::numeric_limits<nfds_t>::max()) {
-        throw std::overflow_error("number of fds for poll would overflow nfds_t");
+        MY_PANIC_WITH_ERRNUM("number of fds for poll would overflow nfds_t", EOVERFLOW);
     }
 
     sigset_t ss;
@@ -98,7 +95,7 @@ int do_poll(struct pollfd *pfds, size_t num_pfds)
     return rc;
 }
 
-void setup_sigmask(sigset_t &old)
+void setup_sigmask(sigset_t &old) noexcept
 {
     sigset_t ss;
     checkcfunc(sigemptyset(&ss));
@@ -107,7 +104,7 @@ void setup_sigmask(sigset_t &old)
     checkcfunc_pth_style(pthread_sigmask(SIG_BLOCK, &ss, &old));
 }
 
-void restore_sigmask(const sigset_t &old)
+void restore_sigmask(const sigset_t &old) noexcept
 {
     checkcfunc_pth_style(pthread_sigmask(SIG_SETMASK, &old, nullptr));
 }

@@ -25,58 +25,31 @@
  * For more information, please refer to <https://unlicense.org>
  */
 
-#pragma once
+#include "strview_utils.hpp"
+#include <vector>
+#include <string_view>
 
-#include <unistd.h>
-#include <utility>
-
-class FD
+namespace strview_utils
 {
-private:
-    int m_fd;
 
-public:
-    FD() : m_fd{-1} {}
-
-    explicit FD(int fd) : m_fd{fd} {}
-
-    FD(FD &&that)
-        : m_fd{that.m_fd}
-    {
-        that.m_fd = -1;
+std::vector<std::string_view> split(std::string_view sv, char delim)
+{
+    if (sv.empty()) {
+        return {};
     }
-
-    FD(const FD &) = delete;
-
-    FD &operator =(FD &&that)
-    {
-        std::swap(m_fd, that.m_fd);
-        return *this;
-    }
-
-    FD &operator =(const FD &) = delete;
-
-    bool is_valid() const
-    {
-        return m_fd >= 0;
-    }
-
-    int raw() const
-    {
-        return m_fd;
-    }
-
-    int release()
-    {
-        int res = m_fd;
-        m_fd = -1;
-        return res;
-    }
-
-    ~FD()
-    {
-        if (m_fd >= 0) {
-            close(m_fd);
+    std::vector<std::string_view> res;
+    size_t i = 0;
+    for (;;) {
+        size_t j = sv.find(delim, i);
+        if (j == std::string_view::npos) {
+            res.push_back(sv.substr(i));
+            break;
         }
+        res.push_back(sv.substr(i, j - i));
+        i = j + 1;
     }
-};
+    res.shrink_to_fit();
+    return res;
+}
+
+} // namespace strview_utils

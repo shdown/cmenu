@@ -28,11 +28,17 @@
 #pragma once
 
 #include "style.hpp"
+#include <stdint.h>
+#include <vector>
 
 struct CMenuStyles
 {
+    static inline constexpr uint8_t MAX_ALT_STYLES = 128;
+
     InternedStyle style_header;
     InternedStyle style_hi;
     InternedStyle style_entry;
     InternedStyle style_error;
+
+    std::vector<InternedStyle> alt;
 };

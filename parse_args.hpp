@@ -40,6 +40,8 @@
 
 struct Args
 {
+    static inline constexpr RawStyle DEFAULT_ALT1_STYLE = {0, COLOR_RED, -1};
+
     int input_fd;
     int output_fd;
 
@@ -51,6 +53,8 @@ struct Args
     RawStyle style_entry;
     RawStyle style_error;
 
+    std::vector<RawStyle> alt_styles;
+
     CCStorage cc_storage;
     ComboStorage combo_storage;
 
@@ -60,6 +64,8 @@ struct Args
     bool bare_mode;
     bool require_enter_after_combo;
     bool report_backslash;
+
+    size_t default_selection;
 
     std::vector<std::pair<char, std::string>> cc_descr;
     std::string backslash_descr;
@@ -74,6 +80,7 @@ struct Args
         , style_hi{    0,      COLOR_WHITE, COLOR_BLUE}
         , style_entry{ 0,      -1,          -1}
         , style_error{ 0,      COLOR_WHITE, COLOR_RED}
+        , alt_styles{}
 
         , cc_storage{}
         , combo_storage{}
@@ -84,11 +91,13 @@ struct Args
         , require_enter_after_combo{false}
         , report_backslash{false}
 
+        , default_selection{static_cast<size_t>(-1)}
+
         , cc_descr{}
         , backslash_descr{}
     {}
 };
 
-void parse_args(int argc, char **argv, Args &dst);
+void parse_args(size_t argc, char **argv, Args &dst, size_t inherited_argc = 0);
 
-void print_usage(FILE *stream, const std::string &my_name);
+void print_usage(FILE *stream, const std::string &my_name) noexcept;

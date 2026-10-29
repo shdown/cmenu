@@ -29,15 +29,15 @@
 #include <wchar.h>
 #include <stdint.h>
 
-#include "probes.generated.h"
+#include "probes.generated.hpp"
 
 #if HAVE_WCWIDTH
-static inline int my_wcwidth(wchar_t c)
+static inline int my_wcwidth(wchar_t c) noexcept
 {
     return wcwidth(c);
 }
 #else
-static inline int my_wcwidth(wchar_t c)
+static inline int my_wcwidth(wchar_t c) noexcept
 {
     if (c == L'\0') {
         return 0;
@@ -49,7 +49,7 @@ static inline int my_wcwidth(wchar_t c)
 }
 #endif
 
-void TruncatedText::truncate_to_width(PHYS width)
+void TruncatedText::truncate_to_width(PHYS width) noexcept
 {
     if (m_target_width == width) {
         return;

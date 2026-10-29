@@ -30,8 +30,8 @@
 #include <vector>
 #include <string>
 #include <algorithm>
-#include "strview_utils.hpp"
-#include "my_assert.hpp"
+#include "common/strview_utils.hpp"
+#include "common/my_assert.hpp"
 #include "errors.hpp"
 
 class ComboStorage
@@ -44,7 +44,7 @@ public:
         NONE,
     };
 
-    static bool is_valid_symbol(char c)
+    static bool is_valid_symbol(char c) noexcept
     {
         if ('0' <= c && c <= '9') {
             return true;
@@ -71,7 +71,7 @@ public:
         , m_frozen{false}
     {}
 
-    bool is_empty() const
+    bool is_empty() const noexcept
     {
         return m_data.empty();
     }
@@ -93,14 +93,7 @@ public:
         }
     }
 
-    size_t num_unique() const
-    {
-        MY_ASSERT(m_frozen);
-
-        return m_data.size();
-    }
-
-    LookupResult lookup(std::string_view sv) const
+    LookupResult lookup(std::string_view sv) const noexcept
     {
         MY_ASSERT(m_frozen);
 

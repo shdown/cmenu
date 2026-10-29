@@ -25,53 +25,49 @@
  * For more information, please refer to <https://unlicense.org>
  */
 
-#include <utility>
-#include <exception>
-#include <stdio.h>
-#include "app.hpp"
-#include "parse_args.hpp"
-#include "errors.hpp"
-#include "fd.hpp"
-#include "fd_utils.hpp"
+#pragma once
 
-int main(int argc, char **argv)
+#include <limits.h>
+#include <type_traits>
+#include <limits>
+
+namespace arith_utils
 {
-    Args my_args;
-    try {
-        parse_args(argc, argv, my_args);
-    } catch (const CommandLineArgsError &e) {
-        fprintf(stderr, "Wrong USAGE: %s\n", e.what());
-        print_usage(stderr, argc == 0 ? "cmenu" : argv[0]);
-        return 2;
+    template<class T>
+    static inline bool mul_is_ok(T &x, T y) noexcept
+    {
+        static_assert(std::is_unsigned_v<T>, "T must be unsigned");
+
+        T max = std::numeric_limits<T>::max();
+        if (y && x > max / y) {
+            return false;
+        }
+        x *= y;
+        return true;
     }
 
-    try {
+    template<class T>
+    static inline bool add_is_ok(T &x, T y) noexcept
+    {
+        static_assert(std::is_unsigned_v<T>, "T must be unsigned");
 
-        std::pair<FD, FD> bare_mode_inout;
-        if (my_args.bare_mode) {
-            bare_mode_inout = fd_utils::copy_stdin_and_stdout_fds();
+        T res = x + y;
+        if (res < y) {
+            return false;
         }
-
-        fd_utils::reset_std_fds();
-
-        app::sigpipe_ignore();
-
-        if (my_args.bare_mode) {
-            app::run_bare_mode(
-                std::move(my_args),
-                std::move(bare_mode_inout.first),
-                std::move(bare_mode_inout.second)
-            );
-        } else {
-            app::run_normal_mode(std::move(my_args));
-        }
-
-    } catch (const CMenuError &e) {
-        fprintf(stderr, "%s\n", e.what());
-        return 1;
-    } catch (const std::runtime_error &e) {
-        fprintf(stderr, "Caught error: %s\n", e.what());
-        return 1;
+        x = res;
+        return true;
     }
-    return 0;
-}
+
+    template<class T>
+    static inline int to_int_saturate(T x) noexcept
+    {
+        static_assert(std::is_unsigned_v<T>, "T must be unsigned");
+
+        if (x > INT_MAX) {
+            return INT_MAX;
+        }
+        return x;
+    }
+
+} // namespace arith_utils

@@ -37,69 +37,76 @@
 #include <stdexcept>
 #include "my_assert.hpp"
 
-#define SV_FMT(sv) strview_utils::size_as_int_or_throw((sv)), (sv).data()
+#define SV_FMT_ARG(sv) strview_utils::size_as_int_or_throw((sv)), (sv).data()
 
 namespace strview_utils
 {
-    inline std::vector<std::string_view> split(std::string_view s, char delim)
+    std::vector<std::string_view> split(std::string_view sv, char delim);
+
+    static inline std::tuple<bool, std::string_view, std::string_view> split_once(
+            std::string_view sv,
+            char delim
+        ) noexcept
     {
-        if (s.empty()) {
-            return {};
+        size_t pos = sv.find(delim);
+        if (pos == std::string_view::npos) {
+            return {false, {}, {}};
         }
-        std::vector<std::string_view> res;
-        size_t i = 0;
-        for (;;) {
-            size_t j = s.find(delim, i);
-            if (j == std::string_view::npos) {
-                res.push_back(s.substr(i));
-                break;
-            }
-            res.push_back(s.substr(i, j - i));
-            i = j + 1;
-        }
-        res.shrink_to_fit();
-        return res;
+        return {
+            true,
+            sv.substr(0, pos),
+            sv.substr(pos + 1),
+        };
     }
 
-    inline std::pair<bool, std::string_view> follow(std::string_view s, std::string_view prefix)
+    static inline std::pair<bool, std::string_view> follow(
+            std::string_view sv,
+            std::string_view prefix
+        ) noexcept
     {
-        if (s.size() < prefix.size()) {
+        if (sv.size() < prefix.size()) {
             return {false, {}};
         }
-        if (prefix != s.substr(0, prefix.size())) {
+        if (prefix != sv.substr(0, prefix.size())) {
             return {false, {}};
         }
-        return {true, s.substr(prefix.size())};
+        return {true, sv.substr(prefix.size())};
     }
 
-    inline bool starts_with(std::string_view s, std::string_view prefix)
+    static inline bool starts_with(std::string_view sv, std::string_view prefix) noexcept
     {
-        auto [ok, _] = follow(s, prefix);
+        auto [ok, _] = follow(sv, prefix);
         return ok;
     }
 
+    static inline bool starts_with_ch(std::string_view sv, char ch) noexcept
+    {
+        return !sv.empty() && sv[0] == ch;
+    }
+
     template<class CharT, class Traits, class Allocator>
-    inline std::basic_string_view<CharT, Traits> from_basic_string(
+    static inline std::basic_string_view<CharT, Traits> from_basic_string(
             const std::basic_string<CharT, Traits, Allocator> &s,
             size_t offset,
-            size_t count = -1)
+            size_t count = -1
+        ) noexcept
     {
         MY_ASSERT(offset <= s.size());
         size_t result_len = std::min<size_t>(count, s.size() - offset);
         return {s.data() + offset, result_len};
     }
 
-    inline std::string_view from_string(const std::string &s, size_t offset, size_t count = -1)
+    static inline std::string_view from_string(const std::string &s, size_t offset, size_t count = -1) noexcept
     {
         return from_basic_string(s, offset, count);
     }
 
-    inline std::wstring_view from_wstring(const std::wstring &s, size_t offset, size_t count = -1)
+    static inline std::wstring_view from_wstring(const std::wstring &s, size_t offset, size_t count = -1) noexcept
     {
         return from_basic_string(s, offset, count);
     }
 
-    inline int size_as_int_or_throw(std::string_view sv)
+    static inline int size_as_int_or_throw(std::string_view sv)
     {
         size_t size = sv.size();
         if (size > static_cast<size_t>(INT_MAX)) {
