@@ -1,6 +1,7 @@
 /cmenu
 /cmlauncher
-*.generated.h
+/cmdesktopmenu
+*.generated.hpp
 # CMake stuff
 CMakeCache.txt
 CMakeFiles

@@ -53,7 +53,6 @@ int main(int argc, char **argv)
         }
 
         fd_utils::reset_stdin_and_stdout_fds();
-
         app::sigpipe_ignore();
 
         if (my_args.bare_mode) {

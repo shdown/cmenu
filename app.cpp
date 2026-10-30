@@ -84,6 +84,7 @@ struct ImmutableParams
     bool bare_mode;
     bool arg_flag_persist;
     bool arg_flag_report_backslash;
+    bool arg_flag_backslash_requires_index;
     bool arg_flag_require_enter_after_combo;
 
     int esc_delay;
@@ -226,15 +227,6 @@ static void end_ncurses() noexcept
     endwin();
 }
 
-static inline void write_to_output_writer(App &A, std::string_view s, bool do_quit)
-{
-    MY_ASSERT(A.has_output_writer());
-
-    A.imm.output_writer.enqueue(s);
-
-    A.quit_flag |= do_quit;
-}
-
 static void do_redraw(App &A)
 {
     erase();
@@ -257,6 +249,36 @@ static void show_info(App &A, std::string_view msg, bool dismissable = true)
 {
     A.info_bar->reset(msg, dismissable);
     A.set_focused(A.info_bar);
+}
+
+static inline void enter_wait_mode(App &A)
+{
+    show_info(A, "...", false);
+}
+
+enum class ActionAfterWrite
+{
+    NONE,
+    QUIT,
+    ENTER_WAIT_MODE,
+};
+
+static inline void write_to_output_writer(App &A, std::string_view s, ActionAfterWrite action)
+{
+    MY_ASSERT(A.has_output_writer());
+
+    A.imm.output_writer.enqueue(s);
+
+    switch (action) {
+    case ActionAfterWrite::NONE:
+        break;
+    case ActionAfterWrite::QUIT:
+        A.quit_flag = true;
+        break;
+    case ActionAfterWrite::ENTER_WAIT_MODE:
+        enter_wait_mode(A);
+        break;
+    }
 }
 
 static std::vector<TruncatedText> read_entry_from_bio(const ImmutableParams &imm, Bio &bio)
@@ -333,7 +355,7 @@ static inline void check_sane_index(uint64_t i, const std::string &line)
 static void execute_command_from_bio(App &A, Bio &bio, const std::string &line, bool &should_shrink)
 {
     if (is_single_char_command(line, 'v')) {
-        write_to_output_writer(A, "1\n", false);
+        write_to_output_writer(A, "1\n", ActionAfterWrite::NONE);
 
     } else if (auto [ok, ver] = is_space_and_number_command(line, 'V'); ok) {
         if (ver != 1) {
@@ -341,14 +363,14 @@ static void execute_command_from_bio(App &A, Bio &bio, const std::string &line, 
         }
 
     } else if (is_single_char_command(line, 'w')) {
-        show_info(A, "...", false);
+        enter_wait_mode(A);
 
     } else if (is_single_char_command(line, 'W')) {
         A.set_focused(A.list);
 
     } else if (is_single_char_command(line, '<')) {
         size_t res = A.list->empty() ? 0 : A.list->selected_index();
-        write_to_output_writer(A, std::to_string(res) + "\n", false);
+        write_to_output_writer(A, std::to_string(res) + "\n", ActionAfterWrite::NONE);
 
     } else if (auto [ok, i] = is_space_and_number_command(line, '>'); ok) {
         check_sane_index(i, line);
@@ -419,7 +441,7 @@ static void read_series_from_bio(App &A, Bio &bio)
         return;
     }
 
-    write_to_output_writer(A, "ok\n", false);
+    write_to_output_writer(A, "ok\n", ActionAfterWrite::NONE);
 }
 
 static void read_whole_list_from_bio(
@@ -559,7 +581,7 @@ static void combo_bar_content_finished(App &A, std::string_view combo)
         s.append(combo);
         s.push_back('\n');
 
-        write_to_output_writer(A, s, true);
+        write_to_output_writer(A, s, ActionAfterWrite::QUIT);
 
     } else {
         A.output_variant = std::make_unique<std::variant<size_t, std::string>>(
@@ -637,7 +659,7 @@ static void event_list_enter(App &A, std::any /*data*/)
             int_utils::append_uint_to_str(s, A.list->selected_index());
             s.push_back('\n');
 
-            write_to_output_writer(A, s, false);
+            write_to_output_writer(A, s, ActionAfterWrite::ENTER_WAIT_MODE);
 
         } else {
             std::string s = "result";
@@ -648,7 +670,7 @@ static void event_list_enter(App &A, std::any /*data*/)
             int_utils::append_uint_to_str(s, A.list->selected_index());
             s.push_back('\n');
 
-            write_to_output_writer(A, s, true);
+            write_to_output_writer(A, s, ActionAfterWrite::QUIT);
         }
 
     } else {
@@ -663,15 +685,17 @@ static void event_list_backslash(App &A, std::any /*data*/)
         return;
     }
 
-    if (A.list->empty()) {
-        show_info(A, "Backslash requires an index, but the list is empty");
-
+    if (A.imm.arg_flag_backslash_requires_index) {
+        if (A.list->empty()) {
+            show_info(A, "Backslash requires an index, but the list is empty");
+        } else {
+            std::string s = "backslash\n";
+            int_utils::append_uint_to_str(s, A.list->selected_index());
+            s.push_back('\n');
+            write_to_output_writer(A, s, ActionAfterWrite::ENTER_WAIT_MODE);
+        }
     } else {
-        std::string s = "backslash\n";
-        int_utils::append_uint_to_str(s, A.list->selected_index());
-        s.push_back('\n');
-
-        write_to_output_writer(A, s, false);
+        write_to_output_writer(A, "backslash\n", ActionAfterWrite::ENTER_WAIT_MODE);
     }
 }
 
@@ -707,14 +731,14 @@ static void event_cc_bar_enter(App &A, std::any data)
             s.push_back('\n');
             int_utils::append_uint_to_str(s, A.list->selected_index());
             s.push_back('\n');
-            write_to_output_writer(A, s, false);
+            write_to_output_writer(A, s, ActionAfterWrite::ENTER_WAIT_MODE);
         }
 
     } else {
         std::string s = "custom\n";
         s.push_back(cmd_ch);
         s.push_back('\n');
-        write_to_output_writer(A, s, false);
+        write_to_output_writer(A, s, ActionAfterWrite::ENTER_WAIT_MODE);
     }
 
     A.set_focused(A.list);
@@ -930,6 +954,7 @@ static ImmutableParams imm_from_args(Args &my_args, FD &&fd_in, FD &&fd_out)
         my_args.bare_mode,
         my_args.persist,
         my_args.report_backslash,
+        my_args.backslash_requires_index,
         my_args.require_enter_after_combo,
         my_args.esc_delay,
         Writer{std::move(fd_out)},

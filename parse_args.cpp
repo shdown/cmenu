@@ -226,16 +226,27 @@ static void parse_report_backslash(Args &dst, std::string_view value)
 {
     if (value == "0") {
         dst.report_backslash = false;
-    } else if (value == "1") {
-        dst.report_backslash = true;
-    } else {
-        auto [ok, descr] = strview_utils::follow(value, "1:");
-        if (!ok) {
-            throw ParseError("expected either '0', '1' or '1:<DESCRIPTION>'");
-        }
-        dst.report_backslash = true;
-        dst.backslash_descr = std::string(descr);
+        return;
     }
+
+    dst.report_backslash = true;
+    dst.backslash_requires_index = false;
+    if (strview_utils::starts_with_ch(value, '%')) {
+        dst.backslash_requires_index = true;
+        value = value.substr(1);
+    }
+
+    if (value == "1") {
+        return;
+    }
+    auto [ok, descr] = strview_utils::follow(value, "1:");
+    if (!ok) {
+        throw ParseError(
+            "expected either '0' or '[%]1' or '[%]1:<DESCRIPTION>', where [%] means optional percent sign"
+        );
+    }
+
+    dst.backslash_descr = std::string(descr);
 }
 
 static void parse_default_selection(Args &dst, std::string_view value)
@@ -284,7 +295,7 @@ static const std::vector<Option> VALID_OPTIONS{
     {"-command=", parse_cc, "<CUSTOM_COMMAND_SPEC>"},
     {"-combo=", parse_combo, "<COMBO>"},
     {"-require-enter-after-combo=", parse_require_enter_after_combo, "{0 | 1}"},
-    {"-report-backslash=", parse_report_backslash, "{0 | 1 | 1:<DESCRIPTION>}"},
+    {"-report-backslash=", parse_report_backslash, "{0 | 1 | 1:<DESCRIPTION> | %1 | %1:<DESCRIPTION>}"},
     {"-default-selection=", parse_default_selection, "<INDEX>"},
     {"-persist=", parse_persist, "{0 | 1}"},
 };

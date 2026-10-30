@@ -64,6 +64,7 @@ struct Args
     bool bare_mode;
     bool require_enter_after_combo;
     bool report_backslash;
+    bool backslash_requires_index;
 
     size_t default_selection;
 
@@ -90,6 +91,7 @@ struct Args
         , bare_mode{false}
         , require_enter_after_combo{false}
         , report_backslash{false}
+        , backslash_requires_index{false}
 
         , default_selection{static_cast<size_t>(-1)}
 

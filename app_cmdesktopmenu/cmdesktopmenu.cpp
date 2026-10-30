@@ -376,21 +376,11 @@ static DAI mode_open_file(
 
 static void cli_pause()
 {
-    using FcloseType = int(*)(FILE *);
-
-    std::unique_ptr<FILE, FcloseType> f{
-        fopen("/dev/tty", "r"),
-        &fclose
-    };
-    if (!f) {
-        return;
-    }
-
     fprintf(stderr, "Press ENTER to continue...\n");
 
     int c;
     do {
-        c = fgetc(f.get());
+        c = fgetc(stdin);
     } while (c != '\n' && c != '\r' && c != EOF);
 }
 
@@ -486,6 +476,7 @@ int main(int argc, char **argv)
     DAI target;
     glib_stuff::File target_file;
 
+    fd_utils::reset_stdin_and_stdout_fds();
     app::sigpipe_ignore();
 
     if (file_arg.empty()) {

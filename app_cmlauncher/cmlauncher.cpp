@@ -580,6 +580,7 @@ int main(int argc, char **argv)
 
     const std::string &cmd = entries.at(res_idx).cmd;
 
+    fd_utils::reset_stdin_and_stdout_fds();
     app::sigpipe_reset_handler_to_default();
 
     FD do_not_kill_me_yet_fd;
